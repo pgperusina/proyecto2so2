@@ -22,7 +22,7 @@ type Caso struct {
 }
 
 const (
-	address = "127.0.0.1:50051"
+	address = "python-service-grpc:50051"
 )
 
 func homePage(w http.ResponseWriter, r *http.Request) {
@@ -66,18 +66,17 @@ func crearCaso(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Caso no pudo ser insertado!", bodyString)
 		return
 	}
-
-	fmt.Fprintf(w, "Caso %+v insertado via grcp!", caso)
-
 	enviarGrcp(bodyString)
+	fmt.Fprintf(w, "Caso %+v insertado via grcp!", caso)
 }
 
 func handleRequests() {
 	r := mux.NewRouter()
 	r.HandleFunc("/", home)
 	r.HandleFunc("/caso", crearCaso).Methods("POST")
-	log.Fatal(http.ListenAndServe(":80", r))
 	log.Println("Servidor levantado en el puerto 80")
+	log.Fatal(http.ListenAndServe(":80", r))
+
 }
 
 func main() {
