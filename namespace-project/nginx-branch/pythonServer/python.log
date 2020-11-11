@@ -1,0 +1,12 @@
+INFO:root:starting grpc server... 
+INFO:root:request deserialized -- {'name': 'Pablo Mendoza', 'location': 'Guatemala City', 'age': 35, 'infectedtype': 'communitary', 'state': 'asymptomatic'}
+INFO:root:***** Insertando caso a Mongo DB *****
+INFO:root:***** Caso insertado en MongoDB: {'name': 'Pablo Mendoza', 'location': 'Guatemala City', 'age': 35, 'infectedtype': 'communitary', 'state': 'asymptomatic', '_id': ObjectId('5fab7c826ca17140d833c6c3')}
+INFO:root:***** Insertando caso a Redis *****
+INFO:root:***** Caso insertado en Redis: {
+"name": "Pablo Mendoza",
+"location": "Guatemala City",
+"age": 35,
+"infectedtype": "communitary",
+"state": "asymptomatic"
+}

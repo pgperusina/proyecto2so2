@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: pyserver
+  name: pyserver
+  namespace: project
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pyserver
+  template:
+    metadata:
+      labels:
+        app: pyserver
+    spec:
+      containers:
+      - image: registry.hub.docker.com/petzydrummer/python-app
+        imagePullPolicy: Always
+        name: python-app
+      restartPolicy: Always

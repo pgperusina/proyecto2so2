@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: go-webserver-rmq
+  name: go-webserver-rmq
+  namespace: project
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-webserver-rmq
+  template:
+    metadata:
+      labels:
+        app: go-webserver-rmq
+    spec:
+      containers:
+      - image: registry.hub.docker.com/petzydrummer/go-webserver
+        imagePullPolicy: Always
+        name: go-webserver
+      restartPolicy: Always

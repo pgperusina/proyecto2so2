@@ -1,0 +1,20 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+  name: nginx-ingress
+  namespace: project
+spec:
+  rules:
+    - host: casos2.covid19so1.tk
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: go-service-grpc
+              servicePort: 80
+          - path: /caso
+            backend:
+              serviceName: go-service-grpc
+              servicePort: 80
