@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: pyserver-grpc
+  name: pyserver-grpc
+  namespace: project
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pyserver-grpc
+  template:
+    metadata:
+      labels:
+        app: pyserver-grpc
+    spec:
+      containers:
+      - image: registry.hub.docker.com/petzydrummer/python-app-grpc
+        imagePullPolicy: Always
+        name: python-app-grpc
+      restartPolicy: Always

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: go-webserver-grpc
+  name: go-webserver-grpc
+  namespace: project
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-webserver-grpc
+  template:
+    metadata:
+      labels:
+        app: go-webserver-grpc
+    spec:
+      containers:
+      - image: registry.hub.docker.com/petzydrummer/go-webserver-grpc
+        imagePullPolicy: Always
+        name: go-webserver-grpc
+      restartPolicy: Always
