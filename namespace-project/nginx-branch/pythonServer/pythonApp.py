@@ -10,14 +10,14 @@ redis_id = 1
 KEY_INDEX = 'index'
 
 try:
-    client = MongoClient("mongodb://34.67.186.172:27017")
+    client = MongoClient("mongodb://sopes1:sopes1proyecto2@34.67.186.172:27017")
     mongo_db = client.covid19
     print('Connection to monboDB successful')
 except Exception as e:
     print('Error connecting to mongoDB - %s', e)
 
 try:
-    redis_db = redis.Redis(host="34.66.203.76", port=6379, db=0)
+    redis_db = redis.Redis(host="34.66.203.76", port=6379, password="sopes1proyecto2", db=0)
     print('Connection to Redis successful')
 except Exception as e:
     print("Error connecting to Redis - %s", e)

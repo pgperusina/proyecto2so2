@@ -131,7 +131,7 @@ func handleRequests() {
 
 func connectMongoDB() *mongo.Client {
 
-	clientOptions := options.Client().ApplyURI("mongodb://34.67.186.172:27017")
+	clientOptions := options.Client().ApplyURI("mongodb://sopes1:sopes1proyecto2@34.67.186.172:27017")
 
 	client, err := mongo.Connect(ctx, clientOptions)
 	if err != nil {
@@ -148,7 +148,7 @@ func connectMongoDB() *mongo.Client {
 func connectRedis() *redis.Client {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     "34.66.203.76:6379",
-		Password: "",
+		Password: "sopes1proyecto2",
 		DB:       0, // use default DB
 	})
 
