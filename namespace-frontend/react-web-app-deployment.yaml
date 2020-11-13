@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: react-web-app
+  name: react-web-app
+  namespace: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: react-web-app
+  template:
+    metadata:
+      labels:
+        app: react-web-app
+    spec:
+      containers:
+      - image: registry.hub.docker.com/petzydrummer/react-web-app
+        imagePullPolicy: Always
+        name: react-web-app
+      restartPolicy: Always

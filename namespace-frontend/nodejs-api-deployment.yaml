@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nodejs-api
+  name: nodejs-api
+  namespace: frontend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nodejs-api
+  template:
+    metadata:
+      labels:
+        app: nodejs-api
+    spec:
+      containers:
+      - image: registry.hub.docker.com/petzydrummer/nodejs-api
+        imagePullPolicy: Always
+        name: nodejs-api
+      restartPolicy: Always
