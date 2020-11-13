@@ -133,6 +133,6 @@ app.all('/api*', function (req, res, next) {
 
 app.use('/api', router);
 
-app.listen(app.get('port'), () => {
+app.listen(app.get('port'), "0.0.0.0", () => {
     console.log(`Server on port ${app.get('port')}`);
 });
