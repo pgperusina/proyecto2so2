@@ -5,7 +5,7 @@ const router = express.Router();
 const app = express();
 
 mongoose
-    .connect('mongodb://sopes1:sopes1proyecto2@34.67.186.172:27017/covid19', {
+    .connect('mongodb://sopes1:sopes1proyecto2@34.67.186.172:27017', {
         useNewUrlParser: true,
         useUnifiedTopology: true,
         useFindAndModify: false,
@@ -35,7 +35,7 @@ let CasosSchema = new Schema({
     age: Number,
     infectedtype: String,
     state: String
-});
+}, { collection : 'covid19' });
 
 let Casos = mongoose.model('Casos', CasosSchema);
 
