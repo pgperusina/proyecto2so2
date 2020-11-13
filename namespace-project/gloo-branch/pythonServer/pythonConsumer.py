@@ -4,6 +4,7 @@ import redis
 import json
 
 redis_id = 1
+KEY_INDEX = 'index'
 
 try:
     client = MongoClient("mongodb://34.67.186.172:27017")
@@ -50,9 +51,10 @@ def insert_mongo_db(data):
 def insert_redis(data):
     try:
         print("***** Insertando caso a Redis *****")
-        global redis_id
-        redis_id = redis_id + 1
-        redis_db.set(str(redis_id), data)
+        redis_db.incr(KEY_INDEX, 1)
+        index = redis_db.get(KEY_INDEX).decode('utf-8')
+        int_index = int(index) 
+        redis_db.set(str(int_index), data)
         print("***** Caso insertado en Redis: ", data)
     except Exception as e:
         print("Error posting document to Redis")
