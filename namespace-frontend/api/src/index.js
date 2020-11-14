@@ -4,6 +4,26 @@ const express = require('express');
 const router = express.Router();
 const app = express();
 
+/**
+ * OBSERVABILITY
+ */
+
+const { NodeTracerProvider } = require("@opentelemetry/node");
+const { BatchSpanProcessor } = require("@opentelemetry/tracing");
+const { JaegerExporter } = require("@opentelemetry/exporter-jaeger");
+
+const tracerProvider = new NodeTracerProvider();
+
+tracerProvider.addSpanProcessor(
+  new BatchSpanProcessor(
+    new JaegerExporter({
+      serviceName: 'nodejs-api'
+    })
+  )
+);
+
+tracerProvider.register();
+
 mongoose
     .connect('mongodb://sopes1:sopes1proyecto2@34.67.186.172:27017/covid19?authSource=admin', {
         useNewUrlParser: true,
