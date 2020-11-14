@@ -1,9 +1,3 @@
-const mongoose = require('mongoose');
-const redis = require('redis')
-const express = require('express');
-const router = express.Router();
-const app = express();
-
 /**
  * OBSERVABILITY
  */
@@ -13,16 +7,25 @@ const { BatchSpanProcessor } = require("@opentelemetry/tracing");
 const { JaegerExporter } = require("@opentelemetry/exporter-jaeger");
 
 const tracerProvider = new NodeTracerProvider();
-
+const jaegerHost = "jaeger-agent.observability.svc.cluster.local";
 tracerProvider.addSpanProcessor(
   new BatchSpanProcessor(
     new JaegerExporter({
-      serviceName: 'nodejs-api'
+        serviceName: 'nodejs-api',
+        host: jaegerHost
     })
   )
 );
 
 tracerProvider.register();
+
+/************************************** */
+
+const mongoose = require('mongoose');
+const redis = require('redis')
+const express = require('express');
+const router = express.Router();
+const app = express();
 
 mongoose
     .connect('mongodb://sopes1:sopes1proyecto2@34.67.186.172:27017/covid19?authSource=admin', {
