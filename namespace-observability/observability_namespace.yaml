@@ -1,0 +1,3188 @@
+apiVersion: v1
+items:
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    creationTimestamp: "2020-11-14T06:04:40Z"
+    generateName: elasticsearch-master-
+    labels:
+      app: elasticsearch-master
+      chart: elasticsearch
+      controller-revision-hash: elasticsearch-master-67967d9c59
+      heritage: Helm
+      release: jaeger
+      statefulset.kubernetes.io/pod-name: elasticsearch-master-0
+    name: elasticsearch-master-0
+    namespace: observability
+    ownerReferences:
+    - apiVersion: apps/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: StatefulSet
+      name: elasticsearch-master
+      uid: 03a5f492-7f2e-42f7-8f86-ce6da69c0438
+    resourceVersion: "1522219"
+    selfLink: /api/v1/namespaces/observability/pods/elasticsearch-master-0
+    uid: d7c10433-425f-4364-ae91-f65d3a52329c
+  spec:
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchExpressions:
+            - key: app
+              operator: In
+              values:
+              - elasticsearch-master
+          topologyKey: kubernetes.io/hostname
+    containers:
+    - env:
+      - name: node.name
+        valueFrom:
+          fieldRef:
+            apiVersion: v1
+            fieldPath: metadata.name
+      - name: cluster.initial_master_nodes
+        value: elasticsearch-master-0,
+      - name: discovery.seed_hosts
+        value: elasticsearch-master-headless
+      - name: cluster.name
+        value: elasticsearch
+      - name: network.host
+        value: 0.0.0.0
+      - name: ES_JAVA_OPTS
+        value: -Xmx1g -Xms1g
+      - name: node.data
+        value: "true"
+      - name: node.ingest
+        value: "true"
+      - name: node.master
+        value: "true"
+      image: docker.elastic.co/elasticsearch/elasticsearch:7.9.3
+      imagePullPolicy: IfNotPresent
+      name: elasticsearch
+      ports:
+      - containerPort: 9200
+        name: http
+        protocol: TCP
+      - containerPort: 9300
+        name: transport
+        protocol: TCP
+      readinessProbe:
+        exec:
+          command:
+          - sh
+          - -c
+          - |
+            #!/usr/bin/env bash -e
+            # If the node is starting up wait for the cluster to be ready (request params: "wait_for_status=green&timeout=1s" )
+            # Once it has started only check that the node itself is responding
+            START_FILE=/tmp/.es_start_file
+
+            # Disable nss cache to avoid filling dentry cache when calling curl
+            # This is required with Elasticsearch Docker using nss < 3.52
+            export NSS_SDB_USE_CACHE=no
+
+            http () {
+              local path="${1}"
+              local args="${2}"
+              set -- -XGET -s
+
+              if [ "$args" != "" ]; then
+                set -- "$@" $args
+              fi
+
+              if [ -n "${ELASTIC_USERNAME}" ] && [ -n "${ELASTIC_PASSWORD}" ]; then
+                set -- "$@" -u "${ELASTIC_USERNAME}:${ELASTIC_PASSWORD}"
+              fi
+
+              curl --output /dev/null -k "$@" "http://127.0.0.1:9200${path}"
+            }
+
+            if [ -f "${START_FILE}" ]; then
+              echo 'Elasticsearch is already running, lets check the node is healthy'
+              HTTP_CODE=$(http "/" "-w %{http_code}")
+              RC=$?
+              if [[ ${RC} -ne 0 ]]; then
+                echo "curl --output /dev/null -k -XGET -s -w '%{http_code}' \${BASIC_AUTH} http://127.0.0.1:9200/ failed with RC ${RC}"
+                exit ${RC}
+              fi
+              # ready if HTTP code 200, 503 is tolerable if ES version is 6.x
+              if [[ ${HTTP_CODE} == "200" ]]; then
+                exit 0
+              elif [[ ${HTTP_CODE} == "503" && "7" == "6" ]]; then
+                exit 0
+              else
+                echo "curl --output /dev/null -k -XGET -s -w '%{http_code}' \${BASIC_AUTH} http://127.0.0.1:9200/ failed with HTTP code ${HTTP_CODE}"
+                exit 1
+              fi
+
+            else
+              echo 'Waiting for elasticsearch cluster to become ready (request params: "wait_for_status=green&timeout=1s" )'
+              if http "/_cluster/health?wait_for_status=green&timeout=1s" "--fail" ; then
+                touch ${START_FILE}
+                exit 0
+              else
+                echo 'Cluster is not yet ready (request params: "wait_for_status=green&timeout=1s" )'
+                exit 1
+              fi
+            fi
+        failureThreshold: 3
+        initialDelaySeconds: 10
+        periodSeconds: 10
+        successThreshold: 3
+        timeoutSeconds: 5
+      resources:
+        limits:
+          cpu: "1"
+          memory: 2Gi
+        requests:
+          cpu: "1"
+          memory: 2Gi
+      securityContext:
+        capabilities:
+          drop:
+          - ALL
+        runAsNonRoot: true
+        runAsUser: 1000
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+      - mountPath: /usr/share/elasticsearch/data
+        name: elasticsearch-master
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: default-token-n4bhz
+        readOnly: true
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    hostname: elasticsearch-master-0
+    initContainers:
+    - command:
+      - sysctl
+      - -w
+      - vm.max_map_count=262144
+      image: docker.elastic.co/elasticsearch/elasticsearch:7.9.3
+      imagePullPolicy: IfNotPresent
+      name: configure-sysctl
+      resources: {}
+      securityContext:
+        privileged: true
+        runAsUser: 0
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: default-token-n4bhz
+        readOnly: true
+    nodeName: gke-covid19-default-pool-0107d698-ll1m
+    priority: 0
+    restartPolicy: Always
+    schedulerName: default-scheduler
+    securityContext:
+      fsGroup: 1000
+      runAsUser: 1000
+    serviceAccount: default
+    serviceAccountName: default
+    subdomain: elasticsearch-master-headless
+    terminationGracePeriodSeconds: 120
+    tolerations:
+    - effect: NoExecute
+      key: node.kubernetes.io/not-ready
+      operator: Exists
+      tolerationSeconds: 300
+    - effect: NoExecute
+      key: node.kubernetes.io/unreachable
+      operator: Exists
+      tolerationSeconds: 300
+    volumes:
+    - name: elasticsearch-master
+      persistentVolumeClaim:
+        claimName: elasticsearch-master-elasticsearch-master-0
+    - name: default-token-n4bhz
+      secret:
+        defaultMode: 420
+        secretName: default-token-n4bhz
+  status:
+    conditions:
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:06:21Z"
+      status: "True"
+      type: Initialized
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:07:22Z"
+      status: "True"
+      type: Ready
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:07:22Z"
+      status: "True"
+      type: ContainersReady
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:04:46Z"
+      status: "True"
+      type: PodScheduled
+    containerStatuses:
+    - containerID: docker://1cbb38ae5da71188d200759805d33a08e953624773ead1a67a08c97c7f3b6a8b
+      image: docker.elastic.co/elasticsearch/elasticsearch:7.9.3
+      imageID: docker-pullable://docker.elastic.co/elasticsearch/elasticsearch@sha256:9116cf5563a6360ed204cd59eb89049d7e2ac9171645dccdb1421b55dbae888b
+      lastState: {}
+      name: elasticsearch
+      ready: true
+      restartCount: 0
+      started: true
+      state:
+        running:
+          startedAt: "2020-11-14T06:06:21Z"
+    hostIP: 10.128.0.4
+    initContainerStatuses:
+    - containerID: docker://b057482447d94cb74df69242b8c7739d0472c694195e8e33812c9957b70268d7
+      image: docker.elastic.co/elasticsearch/elasticsearch:7.9.3
+      imageID: docker-pullable://docker.elastic.co/elasticsearch/elasticsearch@sha256:9116cf5563a6360ed204cd59eb89049d7e2ac9171645dccdb1421b55dbae888b
+      lastState: {}
+      name: configure-sysctl
+      ready: true
+      restartCount: 0
+      state:
+        terminated:
+          containerID: docker://b057482447d94cb74df69242b8c7739d0472c694195e8e33812c9957b70268d7
+          exitCode: 0
+          finishedAt: "2020-11-14T06:06:21Z"
+          reason: Completed
+          startedAt: "2020-11-14T06:06:21Z"
+    phase: Running
+    podIP: 10.0.0.57
+    podIPs:
+    - ip: 10.0.0.57
+    qosClass: Burstable
+    startTime: "2020-11-14T06:04:46Z"
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    creationTimestamp: "2020-11-14T06:04:39Z"
+    generateName: jaeger-agent-
+    labels:
+      app.kubernetes.io/component: agent
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      controller-revision-hash: 5fc9cbcc4d
+      pod-template-generation: "1"
+    name: jaeger-agent-jpjnn
+    namespace: observability
+    ownerReferences:
+    - apiVersion: apps/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: DaemonSet
+      name: jaeger-agent
+      uid: 917f296b-7cdb-4bbc-b4a6-69f69f7aa992
+    resourceVersion: "1521411"
+    selfLink: /api/v1/namespaces/observability/pods/jaeger-agent-jpjnn
+    uid: 7d04b122-d387-4a30-a678-9ea1d24b70bb
+  spec:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchFields:
+            - key: metadata.name
+              operator: In
+              values:
+              - gke-covid19-default-pool-0107d698-qz0n
+    containers:
+    - env:
+      - name: REPORTER_GRPC_HOST_PORT
+        value: jaeger-collector:14250
+      image: jaegertracing/jaeger-agent:1.20.0
+      imagePullPolicy: IfNotPresent
+      livenessProbe:
+        failureThreshold: 3
+        httpGet:
+          path: /
+          port: admin
+          scheme: HTTP
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 1
+      name: jaeger-agent
+      ports:
+      - containerPort: 5775
+        name: zipkin-compact
+        protocol: UDP
+      - containerPort: 6831
+        name: jaeger-compact
+        protocol: UDP
+      - containerPort: 6832
+        name: jaeger-binary
+        protocol: UDP
+      - containerPort: 5778
+        name: http
+        protocol: TCP
+      - containerPort: 14271
+        name: admin
+        protocol: TCP
+      readinessProbe:
+        failureThreshold: 3
+        httpGet:
+          path: /
+          port: admin
+          scheme: HTTP
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 1
+      resources: {}
+      securityContext: {}
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: jaeger-agent-token-7kb4g
+        readOnly: true
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    nodeName: gke-covid19-default-pool-0107d698-qz0n
+    priority: 0
+    restartPolicy: Always
+    schedulerName: default-scheduler
+    securityContext: {}
+    serviceAccount: jaeger-agent
+    serviceAccountName: jaeger-agent
+    terminationGracePeriodSeconds: 30
+    tolerations:
+    - effect: NoExecute
+      key: node.kubernetes.io/not-ready
+      operator: Exists
+    - effect: NoExecute
+      key: node.kubernetes.io/unreachable
+      operator: Exists
+    - effect: NoSchedule
+      key: node.kubernetes.io/disk-pressure
+      operator: Exists
+    - effect: NoSchedule
+      key: node.kubernetes.io/memory-pressure
+      operator: Exists
+    - effect: NoSchedule
+      key: node.kubernetes.io/pid-pressure
+      operator: Exists
+    - effect: NoSchedule
+      key: node.kubernetes.io/unschedulable
+      operator: Exists
+    volumes:
+    - name: jaeger-agent-token-7kb4g
+      secret:
+        defaultMode: 420
+        secretName: jaeger-agent-token-7kb4g
+  status:
+    conditions:
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:04:39Z"
+      status: "True"
+      type: Initialized
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:04:46Z"
+      status: "True"
+      type: Ready
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:04:46Z"
+      status: "True"
+      type: ContainersReady
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:04:39Z"
+      status: "True"
+      type: PodScheduled
+    containerStatuses:
+    - containerID: docker://49627430a99aed908135b86829017c97232396facc22ad92b0429243db2efba7
+      image: jaegertracing/jaeger-agent:1.20.0
+      imageID: docker-pullable://jaegertracing/jaeger-agent@sha256:fe81f6d44149ad21a710bcdbe141f8e31ce53464a1f8320b9580fad3e17586e3
+      lastState: {}
+      name: jaeger-agent
+      ready: true
+      restartCount: 0
+      started: true
+      state:
+        running:
+          startedAt: "2020-11-14T06:04:41Z"
+    hostIP: 10.128.0.5
+    phase: Running
+    podIP: 10.0.1.30
+    podIPs:
+    - ip: 10.0.1.30
+    qosClass: BestEffort
+    startTime: "2020-11-14T06:04:39Z"
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    creationTimestamp: "2020-11-14T06:04:39Z"
+    generateName: jaeger-agent-
+    labels:
+      app.kubernetes.io/component: agent
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      controller-revision-hash: 5fc9cbcc4d
+      pod-template-generation: "1"
+    name: jaeger-agent-pssxp
+    namespace: observability
+    ownerReferences:
+    - apiVersion: apps/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: DaemonSet
+      name: jaeger-agent
+      uid: 917f296b-7cdb-4bbc-b4a6-69f69f7aa992
+    resourceVersion: "1521379"
+    selfLink: /api/v1/namespaces/observability/pods/jaeger-agent-pssxp
+    uid: 76458bd2-2c3d-4fb0-ba11-2f534e211e73
+  spec:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchFields:
+            - key: metadata.name
+              operator: In
+              values:
+              - gke-covid19-default-pool-0107d698-ll1m
+    containers:
+    - env:
+      - name: REPORTER_GRPC_HOST_PORT
+        value: jaeger-collector:14250
+      image: jaegertracing/jaeger-agent:1.20.0
+      imagePullPolicy: IfNotPresent
+      livenessProbe:
+        failureThreshold: 3
+        httpGet:
+          path: /
+          port: admin
+          scheme: HTTP
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 1
+      name: jaeger-agent
+      ports:
+      - containerPort: 5775
+        name: zipkin-compact
+        protocol: UDP
+      - containerPort: 6831
+        name: jaeger-compact
+        protocol: UDP
+      - containerPort: 6832
+        name: jaeger-binary
+        protocol: UDP
+      - containerPort: 5778
+        name: http
+        protocol: TCP
+      - containerPort: 14271
+        name: admin
+        protocol: TCP
+      readinessProbe:
+        failureThreshold: 3
+        httpGet:
+          path: /
+          port: admin
+          scheme: HTTP
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 1
+      resources: {}
+      securityContext: {}
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: jaeger-agent-token-7kb4g
+        readOnly: true
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    nodeName: gke-covid19-default-pool-0107d698-ll1m
+    priority: 0
+    restartPolicy: Always
+    schedulerName: default-scheduler
+    securityContext: {}
+    serviceAccount: jaeger-agent
+    serviceAccountName: jaeger-agent
+    terminationGracePeriodSeconds: 30
+    tolerations:
+    - effect: NoExecute
+      key: node.kubernetes.io/not-ready
+      operator: Exists
+    - effect: NoExecute
+      key: node.kubernetes.io/unreachable
+      operator: Exists
+    - effect: NoSchedule
+      key: node.kubernetes.io/disk-pressure
+      operator: Exists
+    - effect: NoSchedule
+      key: node.kubernetes.io/memory-pressure
+      operator: Exists
+    - effect: NoSchedule
+      key: node.kubernetes.io/pid-pressure
+      operator: Exists
+    - effect: NoSchedule
+      key: node.kubernetes.io/unschedulable
+      operator: Exists
+    volumes:
+    - name: jaeger-agent-token-7kb4g
+      secret:
+        defaultMode: 420
+        secretName: jaeger-agent-token-7kb4g
+  status:
+    conditions:
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:04:39Z"
+      status: "True"
+      type: Initialized
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:04:43Z"
+      status: "True"
+      type: Ready
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:04:43Z"
+      status: "True"
+      type: ContainersReady
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:04:39Z"
+      status: "True"
+      type: PodScheduled
+    containerStatuses:
+    - containerID: docker://4dd1abc46a3585cb58df9a4569593ee422ac6213c71485de542778f58d398f51
+      image: jaegertracing/jaeger-agent:1.20.0
+      imageID: docker-pullable://jaegertracing/jaeger-agent@sha256:fe81f6d44149ad21a710bcdbe141f8e31ce53464a1f8320b9580fad3e17586e3
+      lastState: {}
+      name: jaeger-agent
+      ready: true
+      restartCount: 0
+      started: true
+      state:
+        running:
+          startedAt: "2020-11-14T06:04:41Z"
+    hostIP: 10.128.0.4
+    phase: Running
+    podIP: 10.0.0.56
+    podIPs:
+    - ip: 10.0.0.56
+    qosClass: BestEffort
+    startTime: "2020-11-14T06:04:39Z"
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    annotations:
+      checksum/config-env: 75a11da44c802486bc6f65640aa48a730f0f684c5c07a42ba3cd1735eb3fb070
+    creationTimestamp: "2020-11-14T06:04:39Z"
+    generateName: jaeger-collector-776d4c7649-
+    labels:
+      app.kubernetes.io/component: collector
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      pod-template-hash: 776d4c7649
+    name: jaeger-collector-776d4c7649-k7rrf
+    namespace: observability
+    ownerReferences:
+    - apiVersion: apps/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: ReplicaSet
+      name: jaeger-collector-776d4c7649
+      uid: 18f25a99-2de6-4b0d-b2a1-a91303b1e985
+    resourceVersion: "1522499"
+    selfLink: /api/v1/namespaces/observability/pods/jaeger-collector-776d4c7649-k7rrf
+    uid: 45c2288c-3bda-4e72-995f-fcf06b727310
+  spec:
+    containers:
+    - env:
+      - name: SPAN_STORAGE_TYPE
+        value: elasticsearch
+      - name: ES_SERVER_URLS
+        value: http://elasticsearch-master:9200
+      - name: ES_USERNAME
+        value: elastic
+      - name: ES_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            key: password
+            name: jaeger-elasticsearch
+      image: jaegertracing/jaeger-collector:1.20.0
+      imagePullPolicy: IfNotPresent
+      livenessProbe:
+        failureThreshold: 3
+        httpGet:
+          path: /
+          port: admin
+          scheme: HTTP
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 1
+      name: jaeger-collector
+      ports:
+      - containerPort: 14250
+        name: grpc
+        protocol: TCP
+      - containerPort: 14268
+        name: http
+        protocol: TCP
+      - containerPort: 14269
+        name: admin
+        protocol: TCP
+      readinessProbe:
+        failureThreshold: 3
+        httpGet:
+          path: /
+          port: admin
+          scheme: HTTP
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 1
+      resources: {}
+      securityContext: {}
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: jaeger-collector-token-9lz54
+        readOnly: true
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    nodeName: gke-covid19-default-pool-0107d698-qz0n
+    priority: 0
+    restartPolicy: Always
+    schedulerName: default-scheduler
+    securityContext: {}
+    serviceAccount: jaeger-collector
+    serviceAccountName: jaeger-collector
+    terminationGracePeriodSeconds: 30
+    tolerations:
+    - effect: NoExecute
+      key: node.kubernetes.io/not-ready
+      operator: Exists
+      tolerationSeconds: 300
+    - effect: NoExecute
+      key: node.kubernetes.io/unreachable
+      operator: Exists
+      tolerationSeconds: 300
+    volumes:
+    - name: jaeger-collector-token-9lz54
+      secret:
+        defaultMode: 420
+        secretName: jaeger-collector-token-9lz54
+  status:
+    conditions:
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:04:39Z"
+      status: "True"
+      type: Initialized
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:08:20Z"
+      status: "True"
+      type: Ready
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:08:20Z"
+      status: "True"
+      type: ContainersReady
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:04:39Z"
+      status: "True"
+      type: PodScheduled
+    containerStatuses:
+    - containerID: docker://5bc3da7b507267a2d4bd05a06ab41e92eb65e16f5bb2b9c9476c3b0d9bbb4734
+      image: jaegertracing/jaeger-collector:1.20.0
+      imageID: docker-pullable://jaegertracing/jaeger-collector@sha256:9a95dc6823112be160d2c914df0e1a6096eaf586de894bfdae36ba7bc88a67e3
+      lastState:
+        terminated:
+          containerID: docker://15219938db72ee5987ef1a8538ce4b1898a9799589fa2a1ea9f47291f6adffd2
+          exitCode: 1
+          finishedAt: "2020-11-14T06:06:47Z"
+          reason: Error
+          startedAt: "2020-11-14T06:06:41Z"
+      name: jaeger-collector
+      ready: true
+      restartCount: 5
+      started: true
+      state:
+        running:
+          startedAt: "2020-11-14T06:08:15Z"
+    hostIP: 10.128.0.5
+    phase: Running
+    podIP: 10.0.1.31
+    podIPs:
+    - ip: 10.0.1.31
+    qosClass: BestEffort
+    startTime: "2020-11-14T06:04:39Z"
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    creationTimestamp: "2020-11-14T06:04:39Z"
+    generateName: jaeger-query-8448ccbf95-
+    labels:
+      app.kubernetes.io/component: query
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      pod-template-hash: 8448ccbf95
+    name: jaeger-query-8448ccbf95-lv28c
+    namespace: observability
+    ownerReferences:
+    - apiVersion: apps/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: ReplicaSet
+      name: jaeger-query-8448ccbf95
+      uid: 087c6f5c-5f19-4814-942d-a1985ade98d4
+    resourceVersion: "1522479"
+    selfLink: /api/v1/namespaces/observability/pods/jaeger-query-8448ccbf95-lv28c
+    uid: c5049704-97a0-4ee1-9a40-d895e8afc339
+  spec:
+    containers:
+    - env:
+      - name: SPAN_STORAGE_TYPE
+        value: elasticsearch
+      - name: ES_SERVER_URLS
+        value: http://elasticsearch-master:9200
+      - name: ES_USERNAME
+        value: elastic
+      - name: ES_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            key: password
+            name: jaeger-elasticsearch
+      - name: JAEGER_AGENT_PORT
+        value: "6831"
+      image: jaegertracing/jaeger-query:1.20.0
+      imagePullPolicy: IfNotPresent
+      livenessProbe:
+        failureThreshold: 3
+        httpGet:
+          path: /
+          port: admin
+          scheme: HTTP
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 1
+      name: jaeger-query
+      ports:
+      - containerPort: 16686
+        name: query
+        protocol: TCP
+      - containerPort: 16687
+        name: admin
+        protocol: TCP
+      readinessProbe:
+        failureThreshold: 3
+        httpGet:
+          path: /
+          port: admin
+          scheme: HTTP
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 1
+      resources: {}
+      securityContext: {}
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: jaeger-query-token-d2zs5
+        readOnly: true
+    - env:
+      - name: REPORTER_GRPC_HOST_PORT
+        value: jaeger-collector:14250
+      image: jaegertracing/jaeger-agent:1.20.0
+      imagePullPolicy: IfNotPresent
+      livenessProbe:
+        failureThreshold: 3
+        httpGet:
+          path: /
+          port: admin
+          scheme: HTTP
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 1
+      name: jaeger-agent-sidecar
+      ports:
+      - containerPort: 14271
+        name: admin
+        protocol: TCP
+      readinessProbe:
+        failureThreshold: 3
+        httpGet:
+          path: /
+          port: admin
+          scheme: HTTP
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 1
+      resources: {}
+      securityContext: {}
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: jaeger-query-token-d2zs5
+        readOnly: true
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    nodeName: gke-covid19-default-pool-0107d698-qz0n
+    priority: 0
+    restartPolicy: Always
+    schedulerName: default-scheduler
+    securityContext: {}
+    serviceAccount: jaeger-query
+    serviceAccountName: jaeger-query
+    terminationGracePeriodSeconds: 30
+    tolerations:
+    - effect: NoExecute
+      key: node.kubernetes.io/not-ready
+      operator: Exists
+      tolerationSeconds: 300
+    - effect: NoExecute
+      key: node.kubernetes.io/unreachable
+      operator: Exists
+      tolerationSeconds: 300
+    volumes:
+    - name: jaeger-query-token-d2zs5
+      secret:
+        defaultMode: 420
+        secretName: jaeger-query-token-d2zs5
+  status:
+    conditions:
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:04:39Z"
+      status: "True"
+      type: Initialized
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:08:16Z"
+      status: "True"
+      type: Ready
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:08:16Z"
+      status: "True"
+      type: ContainersReady
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-14T06:04:39Z"
+      status: "True"
+      type: PodScheduled
+    containerStatuses:
+    - containerID: docker://1cc5347555baea7b97bb0ecd0d5797432f17dc078d09f7803ffd9cd174ca3e74
+      image: jaegertracing/jaeger-agent:1.20.0
+      imageID: docker-pullable://jaegertracing/jaeger-agent@sha256:fe81f6d44149ad21a710bcdbe141f8e31ce53464a1f8320b9580fad3e17586e3
+      lastState: {}
+      name: jaeger-agent-sidecar
+      ready: true
+      restartCount: 0
+      started: true
+      state:
+        running:
+          startedAt: "2020-11-14T06:04:44Z"
+    - containerID: docker://0aa82400b8545fb880794c14dbd202e54b2acb08f424820b2a4fb9425148f15f
+      image: jaegertracing/jaeger-query:1.20.0
+      imageID: docker-pullable://jaegertracing/jaeger-query@sha256:cc5339af9a0c760f84108d9e16b4f96811585479b5164520c7e285d92b1134ac
+      lastState:
+        terminated:
+          containerID: docker://31a4496f700574891d0c1b9b79148813eba57307bd9f31e5759f0a4a8b487f49
+          exitCode: 1
+          finishedAt: "2020-11-14T06:06:48Z"
+          reason: Error
+          startedAt: "2020-11-14T06:06:41Z"
+      name: jaeger-query
+      ready: true
+      restartCount: 5
+      started: true
+      state:
+        running:
+          startedAt: "2020-11-14T06:08:10Z"
+    hostIP: 10.128.0.5
+    phase: Running
+    podIP: 10.0.1.32
+    podIPs:
+    - ip: 10.0.1.32
+    qosClass: BestEffort
+    startTime: "2020-11-14T06:04:39Z"
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    creationTimestamp: "2020-11-15T04:59:02Z"
+    generateName: jaeger-spark-1605416340-
+    labels:
+      app.kubernetes.io/component: spark
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      controller-uid: 9dd4c851-0254-4b5e-a7f2-36d40a5d03c4
+      job-name: jaeger-spark-1605416340
+    name: jaeger-spark-1605416340-fx76b
+    namespace: observability
+    ownerReferences:
+    - apiVersion: batch/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: Job
+      name: jaeger-spark-1605416340
+      uid: 9dd4c851-0254-4b5e-a7f2-36d40a5d03c4
+    resourceVersion: "1901582"
+    selfLink: /api/v1/namespaces/observability/pods/jaeger-spark-1605416340-fx76b
+    uid: fa2ffd83-90ab-43ba-b6f1-c60f6711a83e
+  spec:
+    containers:
+    - env:
+      - name: STORAGE
+        value: elasticsearch
+      - name: ES_SERVER_URLS
+        value: http://elasticsearch-master:9200
+      - name: ES_USERNAME
+        value: elastic
+      - name: ES_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            key: password
+            name: jaeger-elasticsearch
+      - name: CASSANDRA_CONTACT_POINTS
+        value: cassandra:9042
+      - name: ES_NODES
+        value: http://elasticsearch-master:9200
+      - name: ES_NODES_WAN_ONLY
+        value: "false"
+      image: jaegertracing/spark-dependencies:latest
+      imagePullPolicy: Always
+      name: jaeger-spark
+      resources: {}
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: jaeger-spark-token-gsxw8
+        readOnly: true
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    nodeName: gke-covid19-default-pool-0107d698-qz0n
+    priority: 0
+    restartPolicy: OnFailure
+    schedulerName: default-scheduler
+    securityContext: {}
+    serviceAccount: jaeger-spark
+    serviceAccountName: jaeger-spark
+    terminationGracePeriodSeconds: 30
+    tolerations:
+    - effect: NoExecute
+      key: node.kubernetes.io/not-ready
+      operator: Exists
+      tolerationSeconds: 300
+    - effect: NoExecute
+      key: node.kubernetes.io/unreachable
+      operator: Exists
+      tolerationSeconds: 300
+    volumes:
+    - name: jaeger-spark-token-gsxw8
+      secret:
+        defaultMode: 420
+        secretName: jaeger-spark-token-gsxw8
+  status:
+    conditions:
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T04:59:02Z"
+      reason: PodCompleted
+      status: "True"
+      type: Initialized
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T04:59:26Z"
+      reason: PodCompleted
+      status: "False"
+      type: Ready
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T04:59:26Z"
+      reason: PodCompleted
+      status: "False"
+      type: ContainersReady
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T04:59:02Z"
+      status: "True"
+      type: PodScheduled
+    containerStatuses:
+    - containerID: docker://dd00bff510a37deab73a10a25e17bdb11522f8b87d19c91f45e9ed14f8732819
+      image: jaegertracing/spark-dependencies:latest
+      imageID: docker-pullable://jaegertracing/spark-dependencies@sha256:3dc11f9a8a2fc6aff2f6cbd002de194f89bb1beb9c2e79834693cc722a3bd84a
+      lastState: {}
+      name: jaeger-spark
+      ready: false
+      restartCount: 0
+      started: false
+      state:
+        terminated:
+          containerID: docker://dd00bff510a37deab73a10a25e17bdb11522f8b87d19c91f45e9ed14f8732819
+          exitCode: 0
+          finishedAt: "2020-11-15T04:59:25Z"
+          reason: Completed
+          startedAt: "2020-11-15T04:59:04Z"
+    hostIP: 10.128.0.5
+    phase: Succeeded
+    podIP: 10.0.1.240
+    podIPs:
+    - ip: 10.0.1.240
+    qosClass: BestEffort
+    startTime: "2020-11-15T04:59:02Z"
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    creationTimestamp: "2020-11-15T05:00:03Z"
+    generateName: jaeger-spark-1605416400-
+    labels:
+      app.kubernetes.io/component: spark
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      controller-uid: 3d0958bd-11f7-46aa-a12f-c51e1ddc8e82
+      job-name: jaeger-spark-1605416400
+    name: jaeger-spark-1605416400-68l79
+    namespace: observability
+    ownerReferences:
+    - apiVersion: batch/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: Job
+      name: jaeger-spark-1605416400
+      uid: 3d0958bd-11f7-46aa-a12f-c51e1ddc8e82
+    resourceVersion: "1901856"
+    selfLink: /api/v1/namespaces/observability/pods/jaeger-spark-1605416400-68l79
+    uid: 0bcb24cf-a7d1-465d-94b7-5b42adb49ebc
+  spec:
+    containers:
+    - env:
+      - name: STORAGE
+        value: elasticsearch
+      - name: ES_SERVER_URLS
+        value: http://elasticsearch-master:9200
+      - name: ES_USERNAME
+        value: elastic
+      - name: ES_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            key: password
+            name: jaeger-elasticsearch
+      - name: CASSANDRA_CONTACT_POINTS
+        value: cassandra:9042
+      - name: ES_NODES
+        value: http://elasticsearch-master:9200
+      - name: ES_NODES_WAN_ONLY
+        value: "false"
+      image: jaegertracing/spark-dependencies:latest
+      imagePullPolicy: Always
+      name: jaeger-spark
+      resources: {}
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: jaeger-spark-token-gsxw8
+        readOnly: true
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    nodeName: gke-covid19-default-pool-0107d698-qz0n
+    priority: 0
+    restartPolicy: OnFailure
+    schedulerName: default-scheduler
+    securityContext: {}
+    serviceAccount: jaeger-spark
+    serviceAccountName: jaeger-spark
+    terminationGracePeriodSeconds: 30
+    tolerations:
+    - effect: NoExecute
+      key: node.kubernetes.io/not-ready
+      operator: Exists
+      tolerationSeconds: 300
+    - effect: NoExecute
+      key: node.kubernetes.io/unreachable
+      operator: Exists
+      tolerationSeconds: 300
+    volumes:
+    - name: jaeger-spark-token-gsxw8
+      secret:
+        defaultMode: 420
+        secretName: jaeger-spark-token-gsxw8
+  status:
+    conditions:
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:00:03Z"
+      reason: PodCompleted
+      status: "True"
+      type: Initialized
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:00:27Z"
+      reason: PodCompleted
+      status: "False"
+      type: Ready
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:00:27Z"
+      reason: PodCompleted
+      status: "False"
+      type: ContainersReady
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:00:03Z"
+      status: "True"
+      type: PodScheduled
+    containerStatuses:
+    - containerID: docker://b2c9ea4ea19f76d0288f27de4cca4f83e6049b2f8e3dfed9b91f2b6b1a0cb7f5
+      image: jaegertracing/spark-dependencies:latest
+      imageID: docker-pullable://jaegertracing/spark-dependencies@sha256:3dc11f9a8a2fc6aff2f6cbd002de194f89bb1beb9c2e79834693cc722a3bd84a
+      lastState: {}
+      name: jaeger-spark
+      ready: false
+      restartCount: 0
+      started: false
+      state:
+        terminated:
+          containerID: docker://b2c9ea4ea19f76d0288f27de4cca4f83e6049b2f8e3dfed9b91f2b6b1a0cb7f5
+          exitCode: 0
+          finishedAt: "2020-11-15T05:00:27Z"
+          reason: Completed
+          startedAt: "2020-11-15T05:00:04Z"
+    hostIP: 10.128.0.5
+    phase: Succeeded
+    podIP: 10.0.1.241
+    podIPs:
+    - ip: 10.0.1.241
+    qosClass: BestEffort
+    startTime: "2020-11-15T05:00:03Z"
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    creationTimestamp: "2020-11-15T05:01:03Z"
+    generateName: jaeger-spark-1605416460-
+    labels:
+      app.kubernetes.io/component: spark
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      controller-uid: edff845b-e9bd-499e-9b94-b906b85e6ffd
+      job-name: jaeger-spark-1605416460
+    name: jaeger-spark-1605416460-tvg8n
+    namespace: observability
+    ownerReferences:
+    - apiVersion: batch/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: Job
+      name: jaeger-spark-1605416460
+      uid: edff845b-e9bd-499e-9b94-b906b85e6ffd
+    resourceVersion: "1902129"
+    selfLink: /api/v1/namespaces/observability/pods/jaeger-spark-1605416460-tvg8n
+    uid: c845b6d9-4d01-4df1-84a7-c61d275ddb4d
+  spec:
+    containers:
+    - env:
+      - name: STORAGE
+        value: elasticsearch
+      - name: ES_SERVER_URLS
+        value: http://elasticsearch-master:9200
+      - name: ES_USERNAME
+        value: elastic
+      - name: ES_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            key: password
+            name: jaeger-elasticsearch
+      - name: CASSANDRA_CONTACT_POINTS
+        value: cassandra:9042
+      - name: ES_NODES
+        value: http://elasticsearch-master:9200
+      - name: ES_NODES_WAN_ONLY
+        value: "false"
+      image: jaegertracing/spark-dependencies:latest
+      imagePullPolicy: Always
+      name: jaeger-spark
+      resources: {}
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: jaeger-spark-token-gsxw8
+        readOnly: true
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    nodeName: gke-covid19-default-pool-0107d698-qz0n
+    priority: 0
+    restartPolicy: OnFailure
+    schedulerName: default-scheduler
+    securityContext: {}
+    serviceAccount: jaeger-spark
+    serviceAccountName: jaeger-spark
+    terminationGracePeriodSeconds: 30
+    tolerations:
+    - effect: NoExecute
+      key: node.kubernetes.io/not-ready
+      operator: Exists
+      tolerationSeconds: 300
+    - effect: NoExecute
+      key: node.kubernetes.io/unreachable
+      operator: Exists
+      tolerationSeconds: 300
+    volumes:
+    - name: jaeger-spark-token-gsxw8
+      secret:
+        defaultMode: 420
+        secretName: jaeger-spark-token-gsxw8
+  status:
+    conditions:
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:01:03Z"
+      reason: PodCompleted
+      status: "True"
+      type: Initialized
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:01:28Z"
+      reason: PodCompleted
+      status: "False"
+      type: Ready
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:01:28Z"
+      reason: PodCompleted
+      status: "False"
+      type: ContainersReady
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:01:03Z"
+      status: "True"
+      type: PodScheduled
+    containerStatuses:
+    - containerID: docker://b839736ecfe183f3dc59872e6e17dc6a6143c8002c5e0c66632f431b1e14b847
+      image: jaegertracing/spark-dependencies:latest
+      imageID: docker-pullable://jaegertracing/spark-dependencies@sha256:3dc11f9a8a2fc6aff2f6cbd002de194f89bb1beb9c2e79834693cc722a3bd84a
+      lastState: {}
+      name: jaeger-spark
+      ready: false
+      restartCount: 0
+      started: false
+      state:
+        terminated:
+          containerID: docker://b839736ecfe183f3dc59872e6e17dc6a6143c8002c5e0c66632f431b1e14b847
+          exitCode: 0
+          finishedAt: "2020-11-15T05:01:28Z"
+          reason: Completed
+          startedAt: "2020-11-15T05:01:04Z"
+    hostIP: 10.128.0.5
+    phase: Succeeded
+    podIP: 10.0.1.242
+    podIPs:
+    - ip: 10.0.1.242
+    qosClass: BestEffort
+    startTime: "2020-11-15T05:01:03Z"
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    creationTimestamp: "2020-11-15T05:02:03Z"
+    generateName: jaeger-spark-1605416520-
+    labels:
+      app.kubernetes.io/component: spark
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      controller-uid: f5fd5b0c-7ad3-459d-96ad-a3ce14491eb1
+      job-name: jaeger-spark-1605416520
+    name: jaeger-spark-1605416520-vt8r6
+    namespace: observability
+    ownerReferences:
+    - apiVersion: batch/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: Job
+      name: jaeger-spark-1605416520
+      uid: f5fd5b0c-7ad3-459d-96ad-a3ce14491eb1
+    resourceVersion: "1902397"
+    selfLink: /api/v1/namespaces/observability/pods/jaeger-spark-1605416520-vt8r6
+    uid: b8551c96-3705-4eec-9d41-f0f7dc1eec3c
+  spec:
+    containers:
+    - env:
+      - name: STORAGE
+        value: elasticsearch
+      - name: ES_SERVER_URLS
+        value: http://elasticsearch-master:9200
+      - name: ES_USERNAME
+        value: elastic
+      - name: ES_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            key: password
+            name: jaeger-elasticsearch
+      - name: CASSANDRA_CONTACT_POINTS
+        value: cassandra:9042
+      - name: ES_NODES
+        value: http://elasticsearch-master:9200
+      - name: ES_NODES_WAN_ONLY
+        value: "false"
+      image: jaegertracing/spark-dependencies:latest
+      imagePullPolicy: Always
+      name: jaeger-spark
+      resources: {}
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: jaeger-spark-token-gsxw8
+        readOnly: true
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    nodeName: gke-covid19-default-pool-0107d698-qz0n
+    priority: 0
+    restartPolicy: OnFailure
+    schedulerName: default-scheduler
+    securityContext: {}
+    serviceAccount: jaeger-spark
+    serviceAccountName: jaeger-spark
+    terminationGracePeriodSeconds: 30
+    tolerations:
+    - effect: NoExecute
+      key: node.kubernetes.io/not-ready
+      operator: Exists
+      tolerationSeconds: 300
+    - effect: NoExecute
+      key: node.kubernetes.io/unreachable
+      operator: Exists
+      tolerationSeconds: 300
+    volumes:
+    - name: jaeger-spark-token-gsxw8
+      secret:
+        defaultMode: 420
+        secretName: jaeger-spark-token-gsxw8
+  status:
+    conditions:
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:02:03Z"
+      reason: PodCompleted
+      status: "True"
+      type: Initialized
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:02:28Z"
+      reason: PodCompleted
+      status: "False"
+      type: Ready
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:02:28Z"
+      reason: PodCompleted
+      status: "False"
+      type: ContainersReady
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:02:03Z"
+      status: "True"
+      type: PodScheduled
+    containerStatuses:
+    - containerID: docker://6f08d1ca67321b320ea2b9f0b99973fac3d994f735660dce0db59acb991e6dc3
+      image: jaegertracing/spark-dependencies:latest
+      imageID: docker-pullable://jaegertracing/spark-dependencies@sha256:3dc11f9a8a2fc6aff2f6cbd002de194f89bb1beb9c2e79834693cc722a3bd84a
+      lastState: {}
+      name: jaeger-spark
+      ready: false
+      restartCount: 0
+      started: false
+      state:
+        terminated:
+          containerID: docker://6f08d1ca67321b320ea2b9f0b99973fac3d994f735660dce0db59acb991e6dc3
+          exitCode: 0
+          finishedAt: "2020-11-15T05:02:27Z"
+          reason: Completed
+          startedAt: "2020-11-15T05:02:04Z"
+    hostIP: 10.128.0.5
+    phase: Succeeded
+    podIP: 10.0.1.243
+    podIPs:
+    - ip: 10.0.1.243
+    qosClass: BestEffort
+    startTime: "2020-11-15T05:02:03Z"
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    creationTimestamp: "2020-11-15T05:03:03Z"
+    generateName: jaeger-spark-1605416580-
+    labels:
+      app.kubernetes.io/component: spark
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      controller-uid: 1c99daf6-9516-4789-8c9d-dadf61abffc6
+      job-name: jaeger-spark-1605416580
+    name: jaeger-spark-1605416580-flp8z
+    namespace: observability
+    ownerReferences:
+    - apiVersion: batch/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: Job
+      name: jaeger-spark-1605416580
+      uid: 1c99daf6-9516-4789-8c9d-dadf61abffc6
+    resourceVersion: "1902662"
+    selfLink: /api/v1/namespaces/observability/pods/jaeger-spark-1605416580-flp8z
+    uid: 5f8c1cae-8d5e-4bad-8aa1-f35f845f7aaf
+  spec:
+    containers:
+    - env:
+      - name: STORAGE
+        value: elasticsearch
+      - name: ES_SERVER_URLS
+        value: http://elasticsearch-master:9200
+      - name: ES_USERNAME
+        value: elastic
+      - name: ES_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            key: password
+            name: jaeger-elasticsearch
+      - name: CASSANDRA_CONTACT_POINTS
+        value: cassandra:9042
+      - name: ES_NODES
+        value: http://elasticsearch-master:9200
+      - name: ES_NODES_WAN_ONLY
+        value: "false"
+      image: jaegertracing/spark-dependencies:latest
+      imagePullPolicy: Always
+      name: jaeger-spark
+      resources: {}
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: jaeger-spark-token-gsxw8
+        readOnly: true
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    nodeName: gke-covid19-default-pool-0107d698-qz0n
+    priority: 0
+    restartPolicy: OnFailure
+    schedulerName: default-scheduler
+    securityContext: {}
+    serviceAccount: jaeger-spark
+    serviceAccountName: jaeger-spark
+    terminationGracePeriodSeconds: 30
+    tolerations:
+    - effect: NoExecute
+      key: node.kubernetes.io/not-ready
+      operator: Exists
+      tolerationSeconds: 300
+    - effect: NoExecute
+      key: node.kubernetes.io/unreachable
+      operator: Exists
+      tolerationSeconds: 300
+    volumes:
+    - name: jaeger-spark-token-gsxw8
+      secret:
+        defaultMode: 420
+        secretName: jaeger-spark-token-gsxw8
+  status:
+    conditions:
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:03:03Z"
+      reason: PodCompleted
+      status: "True"
+      type: Initialized
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:03:27Z"
+      reason: PodCompleted
+      status: "False"
+      type: Ready
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:03:27Z"
+      reason: PodCompleted
+      status: "False"
+      type: ContainersReady
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:03:03Z"
+      status: "True"
+      type: PodScheduled
+    containerStatuses:
+    - containerID: docker://be273bcd00afb5e701d9b07cb1685b1415780814fc9b633581bdce98f123dfcf
+      image: jaegertracing/spark-dependencies:latest
+      imageID: docker-pullable://jaegertracing/spark-dependencies@sha256:3dc11f9a8a2fc6aff2f6cbd002de194f89bb1beb9c2e79834693cc722a3bd84a
+      lastState: {}
+      name: jaeger-spark
+      ready: false
+      restartCount: 0
+      started: false
+      state:
+        terminated:
+          containerID: docker://be273bcd00afb5e701d9b07cb1685b1415780814fc9b633581bdce98f123dfcf
+          exitCode: 0
+          finishedAt: "2020-11-15T05:03:27Z"
+          reason: Completed
+          startedAt: "2020-11-15T05:03:05Z"
+    hostIP: 10.128.0.5
+    phase: Succeeded
+    podIP: 10.0.1.244
+    podIPs:
+    - ip: 10.0.1.244
+    qosClass: BestEffort
+    startTime: "2020-11-15T05:03:03Z"
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    creationTimestamp: "2020-11-15T05:04:03Z"
+    generateName: jaeger-spark-1605416640-
+    labels:
+      app.kubernetes.io/component: spark
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      controller-uid: d60b52f1-a32c-4f71-9036-49c2d9714723
+      job-name: jaeger-spark-1605416640
+    name: jaeger-spark-1605416640-gn5pr
+    namespace: observability
+    ownerReferences:
+    - apiVersion: batch/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: Job
+      name: jaeger-spark-1605416640
+      uid: d60b52f1-a32c-4f71-9036-49c2d9714723
+    resourceVersion: "1902829"
+    selfLink: /api/v1/namespaces/observability/pods/jaeger-spark-1605416640-gn5pr
+    uid: f33ff6cf-41d0-48e5-8926-3736a74a7013
+  spec:
+    containers:
+    - env:
+      - name: STORAGE
+        value: elasticsearch
+      - name: ES_SERVER_URLS
+        value: http://elasticsearch-master:9200
+      - name: ES_USERNAME
+        value: elastic
+      - name: ES_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            key: password
+            name: jaeger-elasticsearch
+      - name: CASSANDRA_CONTACT_POINTS
+        value: cassandra:9042
+      - name: ES_NODES
+        value: http://elasticsearch-master:9200
+      - name: ES_NODES_WAN_ONLY
+        value: "false"
+      image: jaegertracing/spark-dependencies:latest
+      imagePullPolicy: Always
+      name: jaeger-spark
+      resources: {}
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: jaeger-spark-token-gsxw8
+        readOnly: true
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    nodeName: gke-covid19-default-pool-0107d698-qz0n
+    priority: 0
+    restartPolicy: OnFailure
+    schedulerName: default-scheduler
+    securityContext: {}
+    serviceAccount: jaeger-spark
+    serviceAccountName: jaeger-spark
+    terminationGracePeriodSeconds: 30
+    tolerations:
+    - effect: NoExecute
+      key: node.kubernetes.io/not-ready
+      operator: Exists
+      tolerationSeconds: 300
+    - effect: NoExecute
+      key: node.kubernetes.io/unreachable
+      operator: Exists
+      tolerationSeconds: 300
+    volumes:
+    - name: jaeger-spark-token-gsxw8
+      secret:
+        defaultMode: 420
+        secretName: jaeger-spark-token-gsxw8
+  status:
+    conditions:
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:04:03Z"
+      status: "True"
+      type: Initialized
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:04:03Z"
+      message: 'containers with unready status: [jaeger-spark]'
+      reason: ContainersNotReady
+      status: "False"
+      type: Ready
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:04:03Z"
+      message: 'containers with unready status: [jaeger-spark]'
+      reason: ContainersNotReady
+      status: "False"
+      type: ContainersReady
+    - lastProbeTime: null
+      lastTransitionTime: "2020-11-15T05:04:03Z"
+      status: "True"
+      type: PodScheduled
+    containerStatuses:
+    - image: jaegertracing/spark-dependencies:latest
+      imageID: ""
+      lastState: {}
+      name: jaeger-spark
+      ready: false
+      restartCount: 0
+      started: false
+      state:
+        waiting:
+          reason: ContainerCreating
+    hostIP: 10.128.0.5
+    phase: Pending
+    qosClass: BestEffort
+    startTime: "2020-11-15T05:04:03Z"
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      meta.helm.sh/release-name: jaeger
+      meta.helm.sh/release-namespace: observability
+    creationTimestamp: "2020-11-14T06:04:39Z"
+    labels:
+      app: elasticsearch-master
+      app.kubernetes.io/managed-by: Helm
+      chart: elasticsearch
+      heritage: Helm
+      release: jaeger
+    name: elasticsearch-master
+    namespace: observability
+    resourceVersion: "1521284"
+    selfLink: /api/v1/namespaces/observability/services/elasticsearch-master
+    uid: 63ffb1dc-c6b0-4971-9dba-06ccbb29bb7a
+  spec:
+    clusterIP: 10.3.247.220
+    ports:
+    - name: http
+      port: 9200
+      protocol: TCP
+      targetPort: 9200
+    - name: transport
+      port: 9300
+      protocol: TCP
+      targetPort: 9300
+    selector:
+      app: elasticsearch-master
+      chart: elasticsearch
+      release: jaeger
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      meta.helm.sh/release-name: jaeger
+      meta.helm.sh/release-namespace: observability
+      service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+    creationTimestamp: "2020-11-14T06:04:39Z"
+    labels:
+      app: elasticsearch-master
+      app.kubernetes.io/managed-by: Helm
+      chart: elasticsearch
+      heritage: Helm
+      release: jaeger
+    name: elasticsearch-master-headless
+    namespace: observability
+    resourceVersion: "1521282"
+    selfLink: /api/v1/namespaces/observability/services/elasticsearch-master-headless
+    uid: 534fa3b0-582a-4f98-b0e6-da73384abdaf
+  spec:
+    clusterIP: None
+    ports:
+    - name: http
+      port: 9200
+      protocol: TCP
+      targetPort: 9200
+    - name: transport
+      port: 9300
+      protocol: TCP
+      targetPort: 9300
+    publishNotReadyAddresses: true
+    selector:
+      app: elasticsearch-master
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      meta.helm.sh/release-name: jaeger
+      meta.helm.sh/release-namespace: observability
+    creationTimestamp: "2020-11-14T06:04:39Z"
+    labels:
+      app.kubernetes.io/component: agent
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: jaeger
+      app.kubernetes.io/version: 1.20.0
+      helm.sh/chart: jaeger-0.39.1
+    name: jaeger-agent
+    namespace: observability
+    resourceVersion: "1521283"
+    selfLink: /api/v1/namespaces/observability/services/jaeger-agent
+    uid: c7ce1cb3-1df2-45cf-a73d-30066fa4411c
+  spec:
+    clusterIP: 10.3.255.225
+    ports:
+    - name: zipkin-compact
+      port: 5775
+      protocol: UDP
+      targetPort: zipkin-compact
+    - name: jaeger-compact
+      port: 6831
+      protocol: UDP
+      targetPort: jaeger-compact
+    - name: jaeger-binary
+      port: 6832
+      protocol: UDP
+      targetPort: jaeger-binary
+    - name: http
+      port: 5778
+      protocol: TCP
+      targetPort: http
+    - name: admin
+      port: 14271
+      protocol: TCP
+      targetPort: admin
+    selector:
+      app.kubernetes.io/component: agent
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      meta.helm.sh/release-name: jaeger
+      meta.helm.sh/release-namespace: observability
+    creationTimestamp: "2020-11-14T06:04:39Z"
+    labels:
+      app.kubernetes.io/component: collector
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: jaeger
+      app.kubernetes.io/version: 1.20.0
+      helm.sh/chart: jaeger-0.39.1
+    name: jaeger-collector
+    namespace: observability
+    resourceVersion: "1521289"
+    selfLink: /api/v1/namespaces/observability/services/jaeger-collector
+    uid: 2f025ab6-7b36-4709-939d-4fa51617aa7b
+  spec:
+    clusterIP: 10.3.250.204
+    ports:
+    - name: grpc
+      port: 14250
+      protocol: TCP
+      targetPort: grpc
+    - name: http
+      port: 14268
+      protocol: TCP
+      targetPort: http
+    - name: admin
+      port: 14269
+      protocol: TCP
+      targetPort: admin
+    selector:
+      app.kubernetes.io/component: collector
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      meta.helm.sh/release-name: jaeger
+      meta.helm.sh/release-namespace: observability
+    creationTimestamp: "2020-11-14T06:04:39Z"
+    labels:
+      app.kubernetes.io/component: query
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: jaeger
+      app.kubernetes.io/version: 1.20.0
+      helm.sh/chart: jaeger-0.39.1
+    name: jaeger-query
+    namespace: observability
+    resourceVersion: "1521288"
+    selfLink: /api/v1/namespaces/observability/services/jaeger-query
+    uid: c8725c1b-83e3-47bf-973b-87b535161a4d
+  spec:
+    clusterIP: 10.3.242.206
+    ports:
+    - name: query
+      port: 80
+      protocol: TCP
+      targetPort: query
+    - name: admin
+      port: 16687
+      protocol: TCP
+      targetPort: admin
+    selector:
+      app.kubernetes.io/component: query
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}
+- apiVersion: apps/v1
+  kind: DaemonSet
+  metadata:
+    annotations:
+      deprecated.daemonset.template.generation: "1"
+      meta.helm.sh/release-name: jaeger
+      meta.helm.sh/release-namespace: observability
+    creationTimestamp: "2020-11-14T06:04:39Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/component: agent
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: jaeger
+      app.kubernetes.io/version: 1.20.0
+      helm.sh/chart: jaeger-0.39.1
+    name: jaeger-agent
+    namespace: observability
+    resourceVersion: "1521413"
+    selfLink: /apis/apps/v1/namespaces/observability/daemonsets/jaeger-agent
+    uid: 917f296b-7cdb-4bbc-b4a6-69f69f7aa992
+  spec:
+    revisionHistoryLimit: 10
+    selector:
+      matchLabels:
+        app.kubernetes.io/component: agent
+        app.kubernetes.io/instance: jaeger
+        app.kubernetes.io/name: jaeger
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app.kubernetes.io/component: agent
+          app.kubernetes.io/instance: jaeger
+          app.kubernetes.io/name: jaeger
+      spec:
+        containers:
+        - env:
+          - name: REPORTER_GRPC_HOST_PORT
+            value: jaeger-collector:14250
+          image: jaegertracing/jaeger-agent:1.20.0
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: admin
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: jaeger-agent
+          ports:
+          - containerPort: 5775
+            name: zipkin-compact
+            protocol: UDP
+          - containerPort: 6831
+            name: jaeger-compact
+            protocol: UDP
+          - containerPort: 6832
+            name: jaeger-binary
+            protocol: UDP
+          - containerPort: 5778
+            name: http
+            protocol: TCP
+          - containerPort: 14271
+            name: admin
+            protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: admin
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources: {}
+          securityContext: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext: {}
+        serviceAccount: jaeger-agent
+        serviceAccountName: jaeger-agent
+        terminationGracePeriodSeconds: 30
+    updateStrategy:
+      rollingUpdate:
+        maxUnavailable: 1
+      type: RollingUpdate
+  status:
+    currentNumberScheduled: 2
+    desiredNumberScheduled: 2
+    numberAvailable: 2
+    numberMisscheduled: 0
+    numberReady: 2
+    observedGeneration: 1
+    updatedNumberScheduled: 2
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    annotations:
+      deployment.kubernetes.io/revision: "1"
+      meta.helm.sh/release-name: jaeger
+      meta.helm.sh/release-namespace: observability
+    creationTimestamp: "2020-11-14T06:04:39Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/component: collector
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: jaeger
+      app.kubernetes.io/version: 1.20.0
+      helm.sh/chart: jaeger-0.39.1
+    name: jaeger-collector
+    namespace: observability
+    resourceVersion: "1522501"
+    selfLink: /apis/apps/v1/namespaces/observability/deployments/jaeger-collector
+    uid: 3528f149-b210-4888-bc72-f1af10794b1a
+  spec:
+    progressDeadlineSeconds: 600
+    replicas: 1
+    revisionHistoryLimit: 10
+    selector:
+      matchLabels:
+        app.kubernetes.io/component: collector
+        app.kubernetes.io/instance: jaeger
+        app.kubernetes.io/name: jaeger
+    strategy:
+      type: Recreate
+    template:
+      metadata:
+        annotations:
+          checksum/config-env: 75a11da44c802486bc6f65640aa48a730f0f684c5c07a42ba3cd1735eb3fb070
+        creationTimestamp: null
+        labels:
+          app.kubernetes.io/component: collector
+          app.kubernetes.io/instance: jaeger
+          app.kubernetes.io/name: jaeger
+      spec:
+        containers:
+        - env:
+          - name: SPAN_STORAGE_TYPE
+            value: elasticsearch
+          - name: ES_SERVER_URLS
+            value: http://elasticsearch-master:9200
+          - name: ES_USERNAME
+            value: elastic
+          - name: ES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: password
+                name: jaeger-elasticsearch
+          image: jaegertracing/jaeger-collector:1.20.0
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: admin
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: jaeger-collector
+          ports:
+          - containerPort: 14250
+            name: grpc
+            protocol: TCP
+          - containerPort: 14268
+            name: http
+            protocol: TCP
+          - containerPort: 14269
+            name: admin
+            protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: admin
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources: {}
+          securityContext: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext: {}
+        serviceAccount: jaeger-collector
+        serviceAccountName: jaeger-collector
+        terminationGracePeriodSeconds: 30
+  status:
+    availableReplicas: 1
+    conditions:
+    - lastTransitionTime: "2020-11-14T06:08:20Z"
+      lastUpdateTime: "2020-11-14T06:08:20Z"
+      message: Deployment has minimum availability.
+      reason: MinimumReplicasAvailable
+      status: "True"
+      type: Available
+    - lastTransitionTime: "2020-11-14T06:04:39Z"
+      lastUpdateTime: "2020-11-14T06:08:20Z"
+      message: ReplicaSet "jaeger-collector-776d4c7649" has successfully progressed.
+      reason: NewReplicaSetAvailable
+      status: "True"
+      type: Progressing
+    observedGeneration: 1
+    readyReplicas: 1
+    replicas: 1
+    updatedReplicas: 1
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    annotations:
+      deployment.kubernetes.io/revision: "1"
+      meta.helm.sh/release-name: jaeger
+      meta.helm.sh/release-namespace: observability
+    creationTimestamp: "2020-11-14T06:04:39Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/component: query
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: jaeger
+      app.kubernetes.io/version: 1.20.0
+      helm.sh/chart: jaeger-0.39.1
+    name: jaeger-query
+    namespace: observability
+    resourceVersion: "1522482"
+    selfLink: /apis/apps/v1/namespaces/observability/deployments/jaeger-query
+    uid: 2079c7dc-5ca5-4714-a1c0-24ee6a9081de
+  spec:
+    progressDeadlineSeconds: 600
+    replicas: 1
+    revisionHistoryLimit: 10
+    selector:
+      matchLabels:
+        app.kubernetes.io/component: query
+        app.kubernetes.io/instance: jaeger
+        app.kubernetes.io/name: jaeger
+    strategy:
+      type: Recreate
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app.kubernetes.io/component: query
+          app.kubernetes.io/instance: jaeger
+          app.kubernetes.io/name: jaeger
+      spec:
+        containers:
+        - env:
+          - name: SPAN_STORAGE_TYPE
+            value: elasticsearch
+          - name: ES_SERVER_URLS
+            value: http://elasticsearch-master:9200
+          - name: ES_USERNAME
+            value: elastic
+          - name: ES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: password
+                name: jaeger-elasticsearch
+          - name: JAEGER_AGENT_PORT
+            value: "6831"
+          image: jaegertracing/jaeger-query:1.20.0
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: admin
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: jaeger-query
+          ports:
+          - containerPort: 16686
+            name: query
+            protocol: TCP
+          - containerPort: 16687
+            name: admin
+            protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: admin
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources: {}
+          securityContext: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        - env:
+          - name: REPORTER_GRPC_HOST_PORT
+            value: jaeger-collector:14250
+          image: jaegertracing/jaeger-agent:1.20.0
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: admin
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: jaeger-agent-sidecar
+          ports:
+          - containerPort: 14271
+            name: admin
+            protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: admin
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources: {}
+          securityContext: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext: {}
+        serviceAccount: jaeger-query
+        serviceAccountName: jaeger-query
+        terminationGracePeriodSeconds: 30
+  status:
+    availableReplicas: 1
+    conditions:
+    - lastTransitionTime: "2020-11-14T06:08:16Z"
+      lastUpdateTime: "2020-11-14T06:08:16Z"
+      message: Deployment has minimum availability.
+      reason: MinimumReplicasAvailable
+      status: "True"
+      type: Available
+    - lastTransitionTime: "2020-11-14T06:04:39Z"
+      lastUpdateTime: "2020-11-14T06:08:16Z"
+      message: ReplicaSet "jaeger-query-8448ccbf95" has successfully progressed.
+      reason: NewReplicaSetAvailable
+      status: "True"
+      type: Progressing
+    observedGeneration: 1
+    readyReplicas: 1
+    replicas: 1
+    updatedReplicas: 1
+- apiVersion: apps/v1
+  kind: ReplicaSet
+  metadata:
+    annotations:
+      deployment.kubernetes.io/desired-replicas: "1"
+      deployment.kubernetes.io/max-replicas: "1"
+      deployment.kubernetes.io/revision: "1"
+      meta.helm.sh/release-name: jaeger
+      meta.helm.sh/release-namespace: observability
+    creationTimestamp: "2020-11-14T06:04:39Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/component: collector
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      pod-template-hash: 776d4c7649
+    name: jaeger-collector-776d4c7649
+    namespace: observability
+    ownerReferences:
+    - apiVersion: apps/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: Deployment
+      name: jaeger-collector
+      uid: 3528f149-b210-4888-bc72-f1af10794b1a
+    resourceVersion: "1522500"
+    selfLink: /apis/apps/v1/namespaces/observability/replicasets/jaeger-collector-776d4c7649
+    uid: 18f25a99-2de6-4b0d-b2a1-a91303b1e985
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app.kubernetes.io/component: collector
+        app.kubernetes.io/instance: jaeger
+        app.kubernetes.io/name: jaeger
+        pod-template-hash: 776d4c7649
+    template:
+      metadata:
+        annotations:
+          checksum/config-env: 75a11da44c802486bc6f65640aa48a730f0f684c5c07a42ba3cd1735eb3fb070
+        creationTimestamp: null
+        labels:
+          app.kubernetes.io/component: collector
+          app.kubernetes.io/instance: jaeger
+          app.kubernetes.io/name: jaeger
+          pod-template-hash: 776d4c7649
+      spec:
+        containers:
+        - env:
+          - name: SPAN_STORAGE_TYPE
+            value: elasticsearch
+          - name: ES_SERVER_URLS
+            value: http://elasticsearch-master:9200
+          - name: ES_USERNAME
+            value: elastic
+          - name: ES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: password
+                name: jaeger-elasticsearch
+          image: jaegertracing/jaeger-collector:1.20.0
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: admin
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: jaeger-collector
+          ports:
+          - containerPort: 14250
+            name: grpc
+            protocol: TCP
+          - containerPort: 14268
+            name: http
+            protocol: TCP
+          - containerPort: 14269
+            name: admin
+            protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: admin
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources: {}
+          securityContext: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext: {}
+        serviceAccount: jaeger-collector
+        serviceAccountName: jaeger-collector
+        terminationGracePeriodSeconds: 30
+  status:
+    availableReplicas: 1
+    fullyLabeledReplicas: 1
+    observedGeneration: 1
+    readyReplicas: 1
+    replicas: 1
+- apiVersion: apps/v1
+  kind: ReplicaSet
+  metadata:
+    annotations:
+      deployment.kubernetes.io/desired-replicas: "1"
+      deployment.kubernetes.io/max-replicas: "1"
+      deployment.kubernetes.io/revision: "1"
+      meta.helm.sh/release-name: jaeger
+      meta.helm.sh/release-namespace: observability
+    creationTimestamp: "2020-11-14T06:04:39Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/component: query
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      pod-template-hash: 8448ccbf95
+    name: jaeger-query-8448ccbf95
+    namespace: observability
+    ownerReferences:
+    - apiVersion: apps/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: Deployment
+      name: jaeger-query
+      uid: 2079c7dc-5ca5-4714-a1c0-24ee6a9081de
+    resourceVersion: "1522480"
+    selfLink: /apis/apps/v1/namespaces/observability/replicasets/jaeger-query-8448ccbf95
+    uid: 087c6f5c-5f19-4814-942d-a1985ade98d4
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app.kubernetes.io/component: query
+        app.kubernetes.io/instance: jaeger
+        app.kubernetes.io/name: jaeger
+        pod-template-hash: 8448ccbf95
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app.kubernetes.io/component: query
+          app.kubernetes.io/instance: jaeger
+          app.kubernetes.io/name: jaeger
+          pod-template-hash: 8448ccbf95
+      spec:
+        containers:
+        - env:
+          - name: SPAN_STORAGE_TYPE
+            value: elasticsearch
+          - name: ES_SERVER_URLS
+            value: http://elasticsearch-master:9200
+          - name: ES_USERNAME
+            value: elastic
+          - name: ES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: password
+                name: jaeger-elasticsearch
+          - name: JAEGER_AGENT_PORT
+            value: "6831"
+          image: jaegertracing/jaeger-query:1.20.0
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: admin
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: jaeger-query
+          ports:
+          - containerPort: 16686
+            name: query
+            protocol: TCP
+          - containerPort: 16687
+            name: admin
+            protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: admin
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources: {}
+          securityContext: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        - env:
+          - name: REPORTER_GRPC_HOST_PORT
+            value: jaeger-collector:14250
+          image: jaegertracing/jaeger-agent:1.20.0
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: admin
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: jaeger-agent-sidecar
+          ports:
+          - containerPort: 14271
+            name: admin
+            protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: admin
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources: {}
+          securityContext: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext: {}
+        serviceAccount: jaeger-query
+        serviceAccountName: jaeger-query
+        terminationGracePeriodSeconds: 30
+  status:
+    availableReplicas: 1
+    fullyLabeledReplicas: 1
+    observedGeneration: 1
+    readyReplicas: 1
+    replicas: 1
+- apiVersion: apps/v1
+  kind: StatefulSet
+  metadata:
+    annotations:
+      esMajorVersion: "7"
+      meta.helm.sh/release-name: jaeger
+      meta.helm.sh/release-namespace: observability
+    creationTimestamp: "2020-11-14T06:04:39Z"
+    generation: 1
+    labels:
+      app: elasticsearch-master
+      app.kubernetes.io/managed-by: Helm
+      chart: elasticsearch
+      heritage: Helm
+      release: jaeger
+    name: elasticsearch-master
+    namespace: observability
+    resourceVersion: "1522220"
+    selfLink: /apis/apps/v1/namespaces/observability/statefulsets/elasticsearch-master
+    uid: 03a5f492-7f2e-42f7-8f86-ce6da69c0438
+  spec:
+    podManagementPolicy: Parallel
+    replicas: 1
+    revisionHistoryLimit: 10
+    selector:
+      matchLabels:
+        app: elasticsearch-master
+    serviceName: elasticsearch-master-headless
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app: elasticsearch-master
+          chart: elasticsearch
+          heritage: Helm
+          release: jaeger
+        name: elasticsearch-master
+      spec:
+        affinity:
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - elasticsearch-master
+              topologyKey: kubernetes.io/hostname
+        containers:
+        - env:
+          - name: node.name
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.name
+          - name: cluster.initial_master_nodes
+            value: elasticsearch-master-0,
+          - name: discovery.seed_hosts
+            value: elasticsearch-master-headless
+          - name: cluster.name
+            value: elasticsearch
+          - name: network.host
+            value: 0.0.0.0
+          - name: ES_JAVA_OPTS
+            value: -Xmx1g -Xms1g
+          - name: node.data
+            value: "true"
+          - name: node.ingest
+            value: "true"
+          - name: node.master
+            value: "true"
+          image: docker.elastic.co/elasticsearch/elasticsearch:7.9.3
+          imagePullPolicy: IfNotPresent
+          name: elasticsearch
+          ports:
+          - containerPort: 9200
+            name: http
+            protocol: TCP
+          - containerPort: 9300
+            name: transport
+            protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - |
+                #!/usr/bin/env bash -e
+                # If the node is starting up wait for the cluster to be ready (request params: "wait_for_status=green&timeout=1s" )
+                # Once it has started only check that the node itself is responding
+                START_FILE=/tmp/.es_start_file
+
+                # Disable nss cache to avoid filling dentry cache when calling curl
+                # This is required with Elasticsearch Docker using nss < 3.52
+                export NSS_SDB_USE_CACHE=no
+
+                http () {
+                  local path="${1}"
+                  local args="${2}"
+                  set -- -XGET -s
+
+                  if [ "$args" != "" ]; then
+                    set -- "$@" $args
+                  fi
+
+                  if [ -n "${ELASTIC_USERNAME}" ] && [ -n "${ELASTIC_PASSWORD}" ]; then
+                    set -- "$@" -u "${ELASTIC_USERNAME}:${ELASTIC_PASSWORD}"
+                  fi
+
+                  curl --output /dev/null -k "$@" "http://127.0.0.1:9200${path}"
+                }
+
+                if [ -f "${START_FILE}" ]; then
+                  echo 'Elasticsearch is already running, lets check the node is healthy'
+                  HTTP_CODE=$(http "/" "-w %{http_code}")
+                  RC=$?
+                  if [[ ${RC} -ne 0 ]]; then
+                    echo "curl --output /dev/null -k -XGET -s -w '%{http_code}' \${BASIC_AUTH} http://127.0.0.1:9200/ failed with RC ${RC}"
+                    exit ${RC}
+                  fi
+                  # ready if HTTP code 200, 503 is tolerable if ES version is 6.x
+                  if [[ ${HTTP_CODE} == "200" ]]; then
+                    exit 0
+                  elif [[ ${HTTP_CODE} == "503" && "7" == "6" ]]; then
+                    exit 0
+                  else
+                    echo "curl --output /dev/null -k -XGET -s -w '%{http_code}' \${BASIC_AUTH} http://127.0.0.1:9200/ failed with HTTP code ${HTTP_CODE}"
+                    exit 1
+                  fi
+
+                else
+                  echo 'Waiting for elasticsearch cluster to become ready (request params: "wait_for_status=green&timeout=1s" )'
+                  if http "/_cluster/health?wait_for_status=green&timeout=1s" "--fail" ; then
+                    touch ${START_FILE}
+                    exit 0
+                  else
+                    echo 'Cluster is not yet ready (request params: "wait_for_status=green&timeout=1s" )'
+                    exit 1
+                  fi
+                fi
+            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 3
+            timeoutSeconds: 5
+          resources:
+            limits:
+              cpu: "1"
+              memory: 2Gi
+            requests:
+              cpu: "1"
+              memory: 2Gi
+          securityContext:
+            capabilities:
+              drop:
+              - ALL
+            runAsNonRoot: true
+            runAsUser: 1000
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /usr/share/elasticsearch/data
+            name: elasticsearch-master
+        dnsPolicy: ClusterFirst
+        enableServiceLinks: true
+        initContainers:
+        - command:
+          - sysctl
+          - -w
+          - vm.max_map_count=262144
+          image: docker.elastic.co/elasticsearch/elasticsearch:7.9.3
+          imagePullPolicy: IfNotPresent
+          name: configure-sysctl
+          resources: {}
+          securityContext:
+            privileged: true
+            runAsUser: 0
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext:
+          fsGroup: 1000
+          runAsUser: 1000
+        terminationGracePeriodSeconds: 120
+    updateStrategy:
+      type: RollingUpdate
+    volumeClaimTemplates:
+    - metadata:
+        creationTimestamp: null
+        name: elasticsearch-master
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 30Gi
+        volumeMode: Filesystem
+      status:
+        phase: Pending
+  status:
+    collisionCount: 0
+    currentReplicas: 1
+    currentRevision: elasticsearch-master-67967d9c59
+    observedGeneration: 1
+    readyReplicas: 1
+    replicas: 1
+    updateRevision: elasticsearch-master-67967d9c59
+    updatedReplicas: 1
+- apiVersion: batch/v1
+  kind: Job
+  metadata:
+    creationTimestamp: "2020-11-15T04:59:02Z"
+    labels:
+      app.kubernetes.io/component: spark
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      controller-uid: 9dd4c851-0254-4b5e-a7f2-36d40a5d03c4
+      job-name: jaeger-spark-1605416340
+    name: jaeger-spark-1605416340
+    namespace: observability
+    ownerReferences:
+    - apiVersion: batch/v1beta1
+      blockOwnerDeletion: true
+      controller: true
+      kind: CronJob
+      name: jaeger-spark
+      uid: 4440c9d7-7231-4f7e-97f5-9edfefe65178
+    resourceVersion: "1901584"
+    selfLink: /apis/batch/v1/namespaces/observability/jobs/jaeger-spark-1605416340
+    uid: 9dd4c851-0254-4b5e-a7f2-36d40a5d03c4
+  spec:
+    backoffLimit: 6
+    completions: 1
+    parallelism: 1
+    selector:
+      matchLabels:
+        controller-uid: 9dd4c851-0254-4b5e-a7f2-36d40a5d03c4
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app.kubernetes.io/component: spark
+          app.kubernetes.io/instance: jaeger
+          app.kubernetes.io/name: jaeger
+          controller-uid: 9dd4c851-0254-4b5e-a7f2-36d40a5d03c4
+          job-name: jaeger-spark-1605416340
+      spec:
+        containers:
+        - env:
+          - name: STORAGE
+            value: elasticsearch
+          - name: ES_SERVER_URLS
+            value: http://elasticsearch-master:9200
+          - name: ES_USERNAME
+            value: elastic
+          - name: ES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: password
+                name: jaeger-elasticsearch
+          - name: CASSANDRA_CONTACT_POINTS
+            value: cassandra:9042
+          - name: ES_NODES
+            value: http://elasticsearch-master:9200
+          - name: ES_NODES_WAN_ONLY
+            value: "false"
+          image: jaegertracing/spark-dependencies:latest
+          imagePullPolicy: Always
+          name: jaeger-spark
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        dnsPolicy: ClusterFirst
+        restartPolicy: OnFailure
+        schedulerName: default-scheduler
+        securityContext: {}
+        serviceAccount: jaeger-spark
+        serviceAccountName: jaeger-spark
+        terminationGracePeriodSeconds: 30
+  status:
+    completionTime: "2020-11-15T04:59:26Z"
+    conditions:
+    - lastProbeTime: "2020-11-15T04:59:26Z"
+      lastTransitionTime: "2020-11-15T04:59:26Z"
+      status: "True"
+      type: Complete
+    startTime: "2020-11-15T04:59:02Z"
+    succeeded: 1
+- apiVersion: batch/v1
+  kind: Job
+  metadata:
+    creationTimestamp: "2020-11-15T05:00:03Z"
+    labels:
+      app.kubernetes.io/component: spark
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      controller-uid: 3d0958bd-11f7-46aa-a12f-c51e1ddc8e82
+      job-name: jaeger-spark-1605416400
+    name: jaeger-spark-1605416400
+    namespace: observability
+    ownerReferences:
+    - apiVersion: batch/v1beta1
+      blockOwnerDeletion: true
+      controller: true
+      kind: CronJob
+      name: jaeger-spark
+      uid: 4440c9d7-7231-4f7e-97f5-9edfefe65178
+    resourceVersion: "1901858"
+    selfLink: /apis/batch/v1/namespaces/observability/jobs/jaeger-spark-1605416400
+    uid: 3d0958bd-11f7-46aa-a12f-c51e1ddc8e82
+  spec:
+    backoffLimit: 6
+    completions: 1
+    parallelism: 1
+    selector:
+      matchLabels:
+        controller-uid: 3d0958bd-11f7-46aa-a12f-c51e1ddc8e82
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app.kubernetes.io/component: spark
+          app.kubernetes.io/instance: jaeger
+          app.kubernetes.io/name: jaeger
+          controller-uid: 3d0958bd-11f7-46aa-a12f-c51e1ddc8e82
+          job-name: jaeger-spark-1605416400
+      spec:
+        containers:
+        - env:
+          - name: STORAGE
+            value: elasticsearch
+          - name: ES_SERVER_URLS
+            value: http://elasticsearch-master:9200
+          - name: ES_USERNAME
+            value: elastic
+          - name: ES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: password
+                name: jaeger-elasticsearch
+          - name: CASSANDRA_CONTACT_POINTS
+            value: cassandra:9042
+          - name: ES_NODES
+            value: http://elasticsearch-master:9200
+          - name: ES_NODES_WAN_ONLY
+            value: "false"
+          image: jaegertracing/spark-dependencies:latest
+          imagePullPolicy: Always
+          name: jaeger-spark
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        dnsPolicy: ClusterFirst
+        restartPolicy: OnFailure
+        schedulerName: default-scheduler
+        securityContext: {}
+        serviceAccount: jaeger-spark
+        serviceAccountName: jaeger-spark
+        terminationGracePeriodSeconds: 30
+  status:
+    completionTime: "2020-11-15T05:00:27Z"
+    conditions:
+    - lastProbeTime: "2020-11-15T05:00:27Z"
+      lastTransitionTime: "2020-11-15T05:00:27Z"
+      status: "True"
+      type: Complete
+    startTime: "2020-11-15T05:00:03Z"
+    succeeded: 1
+- apiVersion: batch/v1
+  kind: Job
+  metadata:
+    creationTimestamp: "2020-11-15T05:01:03Z"
+    labels:
+      app.kubernetes.io/component: spark
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      controller-uid: edff845b-e9bd-499e-9b94-b906b85e6ffd
+      job-name: jaeger-spark-1605416460
+    name: jaeger-spark-1605416460
+    namespace: observability
+    ownerReferences:
+    - apiVersion: batch/v1beta1
+      blockOwnerDeletion: true
+      controller: true
+      kind: CronJob
+      name: jaeger-spark
+      uid: 4440c9d7-7231-4f7e-97f5-9edfefe65178
+    resourceVersion: "1902131"
+    selfLink: /apis/batch/v1/namespaces/observability/jobs/jaeger-spark-1605416460
+    uid: edff845b-e9bd-499e-9b94-b906b85e6ffd
+  spec:
+    backoffLimit: 6
+    completions: 1
+    parallelism: 1
+    selector:
+      matchLabels:
+        controller-uid: edff845b-e9bd-499e-9b94-b906b85e6ffd
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app.kubernetes.io/component: spark
+          app.kubernetes.io/instance: jaeger
+          app.kubernetes.io/name: jaeger
+          controller-uid: edff845b-e9bd-499e-9b94-b906b85e6ffd
+          job-name: jaeger-spark-1605416460
+      spec:
+        containers:
+        - env:
+          - name: STORAGE
+            value: elasticsearch
+          - name: ES_SERVER_URLS
+            value: http://elasticsearch-master:9200
+          - name: ES_USERNAME
+            value: elastic
+          - name: ES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: password
+                name: jaeger-elasticsearch
+          - name: CASSANDRA_CONTACT_POINTS
+            value: cassandra:9042
+          - name: ES_NODES
+            value: http://elasticsearch-master:9200
+          - name: ES_NODES_WAN_ONLY
+            value: "false"
+          image: jaegertracing/spark-dependencies:latest
+          imagePullPolicy: Always
+          name: jaeger-spark
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        dnsPolicy: ClusterFirst
+        restartPolicy: OnFailure
+        schedulerName: default-scheduler
+        securityContext: {}
+        serviceAccount: jaeger-spark
+        serviceAccountName: jaeger-spark
+        terminationGracePeriodSeconds: 30
+  status:
+    completionTime: "2020-11-15T05:01:28Z"
+    conditions:
+    - lastProbeTime: "2020-11-15T05:01:28Z"
+      lastTransitionTime: "2020-11-15T05:01:28Z"
+      status: "True"
+      type: Complete
+    startTime: "2020-11-15T05:01:03Z"
+    succeeded: 1
+- apiVersion: batch/v1
+  kind: Job
+  metadata:
+    creationTimestamp: "2020-11-15T05:02:03Z"
+    labels:
+      app.kubernetes.io/component: spark
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      controller-uid: f5fd5b0c-7ad3-459d-96ad-a3ce14491eb1
+      job-name: jaeger-spark-1605416520
+    name: jaeger-spark-1605416520
+    namespace: observability
+    ownerReferences:
+    - apiVersion: batch/v1beta1
+      blockOwnerDeletion: true
+      controller: true
+      kind: CronJob
+      name: jaeger-spark
+      uid: 4440c9d7-7231-4f7e-97f5-9edfefe65178
+    resourceVersion: "1902399"
+    selfLink: /apis/batch/v1/namespaces/observability/jobs/jaeger-spark-1605416520
+    uid: f5fd5b0c-7ad3-459d-96ad-a3ce14491eb1
+  spec:
+    backoffLimit: 6
+    completions: 1
+    parallelism: 1
+    selector:
+      matchLabels:
+        controller-uid: f5fd5b0c-7ad3-459d-96ad-a3ce14491eb1
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app.kubernetes.io/component: spark
+          app.kubernetes.io/instance: jaeger
+          app.kubernetes.io/name: jaeger
+          controller-uid: f5fd5b0c-7ad3-459d-96ad-a3ce14491eb1
+          job-name: jaeger-spark-1605416520
+      spec:
+        containers:
+        - env:
+          - name: STORAGE
+            value: elasticsearch
+          - name: ES_SERVER_URLS
+            value: http://elasticsearch-master:9200
+          - name: ES_USERNAME
+            value: elastic
+          - name: ES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: password
+                name: jaeger-elasticsearch
+          - name: CASSANDRA_CONTACT_POINTS
+            value: cassandra:9042
+          - name: ES_NODES
+            value: http://elasticsearch-master:9200
+          - name: ES_NODES_WAN_ONLY
+            value: "false"
+          image: jaegertracing/spark-dependencies:latest
+          imagePullPolicy: Always
+          name: jaeger-spark
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        dnsPolicy: ClusterFirst
+        restartPolicy: OnFailure
+        schedulerName: default-scheduler
+        securityContext: {}
+        serviceAccount: jaeger-spark
+        serviceAccountName: jaeger-spark
+        terminationGracePeriodSeconds: 30
+  status:
+    completionTime: "2020-11-15T05:02:28Z"
+    conditions:
+    - lastProbeTime: "2020-11-15T05:02:28Z"
+      lastTransitionTime: "2020-11-15T05:02:28Z"
+      status: "True"
+      type: Complete
+    startTime: "2020-11-15T05:02:03Z"
+    succeeded: 1
+- apiVersion: batch/v1
+  kind: Job
+  metadata:
+    creationTimestamp: "2020-11-15T05:03:03Z"
+    labels:
+      app.kubernetes.io/component: spark
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      controller-uid: 1c99daf6-9516-4789-8c9d-dadf61abffc6
+      job-name: jaeger-spark-1605416580
+    name: jaeger-spark-1605416580
+    namespace: observability
+    ownerReferences:
+    - apiVersion: batch/v1beta1
+      blockOwnerDeletion: true
+      controller: true
+      kind: CronJob
+      name: jaeger-spark
+      uid: 4440c9d7-7231-4f7e-97f5-9edfefe65178
+    resourceVersion: "1902664"
+    selfLink: /apis/batch/v1/namespaces/observability/jobs/jaeger-spark-1605416580
+    uid: 1c99daf6-9516-4789-8c9d-dadf61abffc6
+  spec:
+    backoffLimit: 6
+    completions: 1
+    parallelism: 1
+    selector:
+      matchLabels:
+        controller-uid: 1c99daf6-9516-4789-8c9d-dadf61abffc6
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app.kubernetes.io/component: spark
+          app.kubernetes.io/instance: jaeger
+          app.kubernetes.io/name: jaeger
+          controller-uid: 1c99daf6-9516-4789-8c9d-dadf61abffc6
+          job-name: jaeger-spark-1605416580
+      spec:
+        containers:
+        - env:
+          - name: STORAGE
+            value: elasticsearch
+          - name: ES_SERVER_URLS
+            value: http://elasticsearch-master:9200
+          - name: ES_USERNAME
+            value: elastic
+          - name: ES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: password
+                name: jaeger-elasticsearch
+          - name: CASSANDRA_CONTACT_POINTS
+            value: cassandra:9042
+          - name: ES_NODES
+            value: http://elasticsearch-master:9200
+          - name: ES_NODES_WAN_ONLY
+            value: "false"
+          image: jaegertracing/spark-dependencies:latest
+          imagePullPolicy: Always
+          name: jaeger-spark
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        dnsPolicy: ClusterFirst
+        restartPolicy: OnFailure
+        schedulerName: default-scheduler
+        securityContext: {}
+        serviceAccount: jaeger-spark
+        serviceAccountName: jaeger-spark
+        terminationGracePeriodSeconds: 30
+  status:
+    completionTime: "2020-11-15T05:03:27Z"
+    conditions:
+    - lastProbeTime: "2020-11-15T05:03:27Z"
+      lastTransitionTime: "2020-11-15T05:03:27Z"
+      status: "True"
+      type: Complete
+    startTime: "2020-11-15T05:03:03Z"
+    succeeded: 1
+- apiVersion: batch/v1
+  kind: Job
+  metadata:
+    creationTimestamp: "2020-11-15T05:04:03Z"
+    labels:
+      app.kubernetes.io/component: spark
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/name: jaeger
+      controller-uid: d60b52f1-a32c-4f71-9036-49c2d9714723
+      job-name: jaeger-spark-1605416640
+    name: jaeger-spark-1605416640
+    namespace: observability
+    ownerReferences:
+    - apiVersion: batch/v1beta1
+      blockOwnerDeletion: true
+      controller: true
+      kind: CronJob
+      name: jaeger-spark
+      uid: 4440c9d7-7231-4f7e-97f5-9edfefe65178
+    resourceVersion: "1902828"
+    selfLink: /apis/batch/v1/namespaces/observability/jobs/jaeger-spark-1605416640
+    uid: d60b52f1-a32c-4f71-9036-49c2d9714723
+  spec:
+    backoffLimit: 6
+    completions: 1
+    parallelism: 1
+    selector:
+      matchLabels:
+        controller-uid: d60b52f1-a32c-4f71-9036-49c2d9714723
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app.kubernetes.io/component: spark
+          app.kubernetes.io/instance: jaeger
+          app.kubernetes.io/name: jaeger
+          controller-uid: d60b52f1-a32c-4f71-9036-49c2d9714723
+          job-name: jaeger-spark-1605416640
+      spec:
+        containers:
+        - env:
+          - name: STORAGE
+            value: elasticsearch
+          - name: ES_SERVER_URLS
+            value: http://elasticsearch-master:9200
+          - name: ES_USERNAME
+            value: elastic
+          - name: ES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: password
+                name: jaeger-elasticsearch
+          - name: CASSANDRA_CONTACT_POINTS
+            value: cassandra:9042
+          - name: ES_NODES
+            value: http://elasticsearch-master:9200
+          - name: ES_NODES_WAN_ONLY
+            value: "false"
+          image: jaegertracing/spark-dependencies:latest
+          imagePullPolicy: Always
+          name: jaeger-spark
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        dnsPolicy: ClusterFirst
+        restartPolicy: OnFailure
+        schedulerName: default-scheduler
+        securityContext: {}
+        serviceAccount: jaeger-spark
+        serviceAccountName: jaeger-spark
+        terminationGracePeriodSeconds: 30
+  status:
+    active: 1
+    startTime: "2020-11-15T05:04:03Z"
+- apiVersion: batch/v1beta1
+  kind: CronJob
+  metadata:
+    annotations:
+      meta.helm.sh/release-name: jaeger
+      meta.helm.sh/release-namespace: observability
+    creationTimestamp: "2020-11-14T06:04:40Z"
+    labels:
+      app.kubernetes.io/component: spark
+      app.kubernetes.io/instance: jaeger
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: jaeger
+      app.kubernetes.io/version: 1.20.0
+      helm.sh/chart: jaeger-0.39.1
+    name: jaeger-spark
+    namespace: observability
+    resourceVersion: "1902824"
+    selfLink: /apis/batch/v1beta1/namespaces/observability/cronjobs/jaeger-spark
+    uid: 4440c9d7-7231-4f7e-97f5-9edfefe65178
+  spec:
+    concurrencyPolicy: Allow
+    failedJobsHistoryLimit: 5
+    jobTemplate:
+      metadata:
+        creationTimestamp: null
+      spec:
+        template:
+          metadata:
+            creationTimestamp: null
+            labels:
+              app.kubernetes.io/component: spark
+              app.kubernetes.io/instance: jaeger
+              app.kubernetes.io/name: jaeger
+          spec:
+            containers:
+            - env:
+              - name: STORAGE
+                value: elasticsearch
+              - name: ES_SERVER_URLS
+                value: http://elasticsearch-master:9200
+              - name: ES_USERNAME
+                value: elastic
+              - name: ES_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    key: password
+                    name: jaeger-elasticsearch
+              - name: CASSANDRA_CONTACT_POINTS
+                value: cassandra:9042
+              - name: ES_NODES
+                value: http://elasticsearch-master:9200
+              - name: ES_NODES_WAN_ONLY
+                value: "false"
+              image: jaegertracing/spark-dependencies:latest
+              imagePullPolicy: Always
+              name: jaeger-spark
+              resources: {}
+              terminationMessagePath: /dev/termination-log
+              terminationMessagePolicy: File
+            dnsPolicy: ClusterFirst
+            restartPolicy: OnFailure
+            schedulerName: default-scheduler
+            securityContext: {}
+            serviceAccount: jaeger-spark
+            serviceAccountName: jaeger-spark
+            terminationGracePeriodSeconds: 30
+    schedule: '*/1 * * * *'
+    successfulJobsHistoryLimit: 5
+    suspend: false
+  status:
+    active:
+    - apiVersion: batch/v1
+      kind: Job
+      name: jaeger-spark-1605416640
+      namespace: observability
+      resourceVersion: "1902823"
+      uid: d60b52f1-a32c-4f71-9036-49c2d9714723
+    lastScheduleTime: "2020-11-15T05:04:00Z"
+kind: List
+metadata:
+  resourceVersion: ""
+  selfLink: ""
