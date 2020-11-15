@@ -9,13 +9,14 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"golang.org/x/net/trace"
 	"google.golang.org/grpc"
 	pb "google.golang.org/grpc/examples/helloworld/helloworld"
 
+	"go.opentelemetry.io/otel/global"
+	"go.opentelemetry.io/otel/label"
+
 	"go.opentelemetry.io/otel/exporters/trace/jaeger"
-	sdk "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/trace"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 type Caso struct {
@@ -30,50 +31,35 @@ const (
 	address = "python-service-grpc:50051"
 )
 
-func setupTracer() (trace.Tracer, *jaeger.Exporter, error) {
-	// Register installs a new global tracer instance.
-	tracer := sdk.Register()
+var ctx = context.Background()
 
-	// Construct and register an export pipeline using the Jaeger
-	// exporter and a span processor.
-	exporter, err := jaeger.NewExporter(
-		jaeger.Options{
-			AgentEndpoint: "jaeger-agent.observability.svc.cluster.local:6831",
-		},
+func initTracer() func() {
+	// Create and install Jaeger export pipeline.
+	flush, err := jaeger.InstallNewPipeline(
+		jaeger.WithCollectorEndpoint("jaeger-agent.observability.svc.cluster.local:6831"),
+		jaeger.WithProcess(jaeger.Process{
+			ServiceName: "go-ws-grpc",
+			Tags: []label.KeyValue{
+				label.String("exporter", "jaeger"),
+				label.Float64("float", 312.23),
+			},
+		}),
+		jaeger.WithSDK(&sdktrace.Config{DefaultSampler: sdktrace.AlwaysSample()}),
 	)
 	if err != nil {
-		return nil, nil, err
+		log.Fatal(err)
 	}
-
-	// A simple span processor calls through to the exporter
-	// without buffering.
-	ssp := sdk.NewSimpleSpanProcessor(exporter)
-	sdk.RegisterSpanProcessor(ssp)
-
-	// Use sdk.AlwaysSample sampler to send all spans.
-	sdk.ApplyConfig(
-		sdk.Config{
-			DefaultSampler: sdk.AlwaysSample(),
-		},
-	)
-
-	return tracer, exporter, nil
+	return flush
 }
 
 func homePage(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
-	tracer := trace.GlobalTracer()
-
-	ctx, trace := tracer.Start(ctx, "go-ws-homepage")
 	fmt.Fprintf(w, "Covid 19 Go API -- Nginx ingress")
 
-	trace.End()
 }
 func enviarGrcp(caso string) {
-	ctx := context.Background()
-	tracer := trace.GlobalTracer()
-
-	ctx, trace := tracer.Start(ctx, "go-ws-enviar-caso-via-grcp")
+	tr := global.Tracer("enviar_grcp")
+	_, span := tr.Start(ctx, "enviar_caso_grcp")
+	defer span.End()
 
 	log.Println("Enviando caso: " + caso)
 	// Envio de mensaje
@@ -90,24 +76,20 @@ func enviarGrcp(caso string) {
 		log.Printf("Error al enviar el mensaje via grcp: %v", err)
 	}
 	log.Printf("Respuesta grcp: %s", res.GetMessage())
-	trace.End()
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
-	tracer := trace.GlobalTracer()
-
-	ctx, trace := tracer.Start(ctx, "go-ws-homepage")
+	tr := global.Tracer("home_page_grcp")
+	_, span := tr.Start(ctx, "home_page_grcp")
+	defer span.End()
 	fmt.Fprintf(w, "Covid 19 Go API -- Nginx ingress")
-
-	trace.End()
 }
 
 func crearCaso(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
-	tracer := trace.GlobalTracer()
+	tr := global.Tracer("crear_caso")
+	_, span := tr.Start(ctx, "crear_caso_grcp")
+	defer span.End()
 
-	ctx, trace := tracer.Start(ctx, "go-ws-recibe-caso-grcp")
 	log.Println("Creando nuevo caso")
 
 	var caso Caso
@@ -125,7 +107,6 @@ func crearCaso(w http.ResponseWriter, r *http.Request) {
 	}
 	enviarGrcp(bodyString)
 	fmt.Fprintf(w, "Caso %+v insertado via grcp!", caso)
-	trace.End()
 }
 
 func handleRequests() {
@@ -138,9 +119,10 @@ func handleRequests() {
 }
 
 func main() {
-	tracer, exporter, err := setupTracer()
-	if err != nil {
-		log.Fatal("Could not initialize tracing: ", err)
-	}
+	ctx = context.Background()
+
+	flush := initTracer()
+	defer flush()
+
 	handleRequests()
 }
