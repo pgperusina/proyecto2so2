@@ -13,9 +13,9 @@ import (
 	"google.golang.org/grpc"
 	pb "google.golang.org/grpc/examples/helloworld/helloworld"
 
-	"go.opentelemetry.io/api/trace"
-	"go.opentelemetry.io/exporter/trace/jaeger"
-	sdk "go.opentelemetry.io/sdk/trace"
+	"go.opentelemetry.io/otel/exporters/trace/jaeger"
+	sdk "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Caso struct {
