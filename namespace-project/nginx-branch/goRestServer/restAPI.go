@@ -9,14 +9,10 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"go.opentelemetry.io/otel/exporters/trace/jaeger"
+	"go.opentelemetry.io/otel/label"
 	"google.golang.org/grpc"
 	pb "google.golang.org/grpc/examples/helloworld/helloworld"
-
-	"go.opentelemetry.io/otel/global"
-	"go.opentelemetry.io/otel/label"
-
-	"go.opentelemetry.io/otel/exporters/trace/jaeger"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 type Caso struct {
@@ -30,8 +26,6 @@ type Caso struct {
 const (
 	address = "python-service-grpc:50051"
 )
-
-var ctx = context.Background()
 
 func initTracer() func() {
 	// Create and install Jaeger export pipeline.
@@ -57,9 +51,6 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 
 }
 func enviarGrcp(caso string) {
-	tr := global.Tracer("enviar_grcp")
-	_, span := tr.Start(ctx, "enviar_caso_grcp")
-	defer span.End()
 
 	log.Println("Enviando caso: " + caso)
 	// Envio de mensaje
@@ -79,16 +70,10 @@ func enviarGrcp(caso string) {
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
-	tr := global.Tracer("home_page_grcp")
-	_, span := tr.Start(ctx, "home_page_grcp")
-	defer span.End()
 	fmt.Fprintf(w, "Covid 19 Go API -- Nginx ingress")
 }
 
 func crearCaso(w http.ResponseWriter, r *http.Request) {
-	tr := global.Tracer("crear_caso")
-	_, span := tr.Start(ctx, "crear_caso_grcp")
-	defer span.End()
 
 	log.Println("Creando nuevo caso")
 
@@ -119,10 +104,6 @@ func handleRequests() {
 }
 
 func main() {
-	ctx = context.Background()
-
-	flush := initTracer()
-	defer flush()
 
 	handleRequests()
 }
