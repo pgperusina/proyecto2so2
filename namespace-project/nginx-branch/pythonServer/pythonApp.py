@@ -61,10 +61,10 @@ class Greeter(helloworld_pb2_grpc.GreeterServicer):
                 print("Error deserializing message - %r", request.name)
                 print(e)
 
-        print("request deserialized -- %s", y)
-        insert_mongo_db(y)
-        insert_redis(request.name)
-        return helloworld_pb2.HelloReply(message = '>>> %s' %"Caso insertado en DBs")
+            print("request deserialized -- %s", y)
+            insert_mongo_db(y)
+            insert_redis(request.name)
+            return helloworld_pb2.HelloReply(message = '>>> %s' %"Caso insertado en DBs")
 
 def insert_mongo_db(data):
     tracer = trace.get_tracer(__name__)
