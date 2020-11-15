@@ -12,6 +12,8 @@ spec:
       app: go-webserver-grpc
   template:
     metadata:
+      annotations:
+        linkerd.io/inject: enabled
       labels:
         app: go-webserver-grpc
     spec:
